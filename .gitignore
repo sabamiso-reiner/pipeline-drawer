@@ -9,5 +9,6 @@ desktop.ini
 .DS_Store
 .vscode/
 
-# local-only files
-private/
+# your own input texts (only my-inputs/README.md is tracked)
+my-inputs/*
+!my-inputs/README.md

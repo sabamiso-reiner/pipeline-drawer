@@ -790,8 +790,10 @@ function saveAsTemplate() {
   const name = (prompt("テンプレートの名前") || "").trim();
   if (!name) return;
   if (BUILTIN_NAMES.includes(name)) { alert(`「${name}」は組み込みのテンプレートと同じ名前なので使えません。`); return; }
+  if (name === "__proto__") { alert("この名前は使えません。"); return; } // would replace the object's prototype instead of adding a key
   const t = loadUserTpl();
-  if (name in t && !confirm(`「${name}」はすでにあります。上書きしますか？`)) return;
+  // own keys only: "constructor" / "toString" etc. are inherited and must not count as existing templates
+  if (Object.hasOwn(t, name) && !confirm(`「${name}」はすでにあります。上書きしますか？`)) return;
   t[name] = src.value;
   if (storeUserTpl(t)) { refreshTplMenu(); flash(`テンプレート「${name}」を保存しました`); }
 }
@@ -835,7 +837,8 @@ function download(blob, name) {
   a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
-const baseName = () => "pipeline";
+// default export name follows the input text's file name (pipeline.txt -> pipeline.pptx)
+const baseName = () => srcName.replace(/\.txt$/i, "") || "pipeline";
 
 function svgString() { return toSVG(current.L); }
 async function pngBlob(scale = 3) {
@@ -869,7 +872,7 @@ const TOUR = [
     <li><b>PPTX で保存</b>：PowerPoint で図形として編集できる形（インターネット接続が必要）</li>
     <li><b>PNG で保存</b> / <b>SVG で保存</b>：画像として保存</li>
     <li><b>PNG をクリップボードにコピー</b>：そのまま貼り付けられます</li></ul>
-    ファイルはブラウザのダウンロードフォルダに保存されます。` },
+    保存の3つは、Chrome / Edge では保存場所とファイル名を選べます（前回の書き出し先が最初に開きます。入力テキストの保存先とは別に覚えます）。` },
   { sel: "#src", title: "入力欄", text: "ここに命令列や注釈をテキストで書きます。書き換えると右の図がすぐ描き直されます。<br>内容はブラウザに自動保存され、開き直すと戻ります。書き方は下の「記法リファレンス」を見てください。" },
   { sel: "#errors", fallback: "#src", title: "エラー表示", text: "書き方に間違いがあると、入力欄の下に赤い欄が出て、何行目の何が問題かを表示します。間違えた部分は既定の見た目で描かれ、ほかの部分はそのまま表示されます。" },
   { sel: "details > summary", title: "記法リファレンス", text: "クリックすると、命令行・色・注釈・<code>set</code> のキーなど、入力欄の書き方の一覧が開きます。" },
@@ -943,26 +946,56 @@ const TOUR = [
   document.addEventListener("click", e => { if (!$("exMenu").contains(e.target)) setOpen(false); });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !list.hidden) { setOpen(false); btn.focus(); } });
 }
-$("exSvg").onclick =() => download(new Blob([svgString()], { type: "image/svg+xml" }), baseName() + ".svg");
-$("exPng").onclick = async () => { try { download(await pngBlob(), baseName() + ".png"); } catch (e) { alert(e.message); } };
+// export with a "Save as" dialog (Chrome / Edge; remembers the last export folder separately from input texts).
+// The dialog is opened first, while the click still counts as a user action, and the file is built afterwards
+// (building a PPTX can take a few seconds). Other browsers: ask for a file name and download.
+const EXPORT_TYPES = {
+  pptx: { description: "PowerPoint プレゼンテーション", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
+  png: { description: "PNG 画像", mime: "image/png" },
+  svg: { description: "SVG 画像", mime: "image/svg+xml" },
+};
+// input texts and exported figures each remember their own folder (inputs usually live in my-inputs/,
+// figures go wherever they are used): the browser keeps the last folder per picker id across sessions,
+// and within this tab we also start next to the file of that kind used last (startIn).
+const lastHandle = { inputs: null, exports: null };
+const pickerPlace = kind => ({ id: "pipeline-drawer-" + kind, ...(lastHandle[kind] ? { startIn: lastHandle[kind] } : {}) });
+async function exportFile(ext, build) {
+  const t = EXPORT_TYPES[ext], suggested = `${baseName()}.${ext}`;
+  try {
+    if (window.showSaveFilePicker) {
+      let h;
+      try { h = await showSaveFilePicker({ ...pickerPlace("exports"), suggestedName: suggested, types: [{ description: t.description, accept: { [t.mime]: ["." + ext] } }] }); }
+      catch (e) { if (e.name === "AbortError") return; throw e; }
+      const blob = await build();
+      const w = await h.createWritable(); await w.write(blob); await w.close();
+      lastHandle.exports = h; flash(`${h.name} に保存しました`);
+      return;
+    }
+    let name = prompt("保存するファイル名（保存先はブラウザのダウンロード設定に従います）", suggested);
+    if (!name || !name.trim()) return;
+    name = name.trim();
+    if (!name.toLowerCase().endsWith("." + ext)) name += "." + ext;
+    download(await build(), name);
+  } catch (e) { alert("保存できませんでした: " + e.message); console.error(e); }
+}
+$("exSvg").onclick = () => exportFile("svg", async () => new Blob([svgString()], { type: "image/svg+xml" }));
+$("exPng").onclick = () => exportFile("png", () => pngBlob());
 $("cpPng").onclick = async () => {
   try { await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob() })]); flash("PNG をクリップボードにコピーしました"); }
   catch (e) { alert("コピーできませんでした: " + e.message); }
 };
-$("exPptx").onclick = async () => {
-  try { download(await toPPTX(current.L, current.D.set), baseName() + ".pptx"); }
-  catch (e) { alert(e.message); console.error(e); }
-};
-// source save: "Save as" dialog (Chrome / Edge) so the user picks name and folder; otherwise ask for a name and download
+$("exPptx").onclick = () => exportFile("pptx", () => toPPTX(current.L, current.D.set));
+// source save/open: file pickers (Chrome / Edge) so the user picks name and folder; otherwise ask for a name and download.
+// The shared picker id makes the browser reopen the folder used last time (e.g. my-inputs/).
 let srcName = "pipeline.txt";
+const PICKER = { types: [{ description: "Pipeline Drawer の入力テキスト", accept: { "text/plain": [".txt"] } }] };
 $("save").onclick = async () => {
   const text = src.value, blob = new Blob([text], { type: "text/plain" });
   if (window.showSaveFilePicker) {
     try {
-      const h = await showSaveFilePicker({ suggestedName: srcName,
-        types: [{ description: "Pipeline Drawer の入力テキスト", accept: { "text/plain": [".txt"] } }] });
+      const h = await showSaveFilePicker({ ...PICKER, ...pickerPlace("inputs"), suggestedName: srcName });
       const w = await h.createWritable(); await w.write(blob); await w.close();
-      srcName = h.name; markSaved(text); flash(`${h.name} に保存しました`);
+      srcName = h.name; lastHandle.inputs = h; markSaved(text); flash(`${h.name} に保存しました`);
     } catch (e) { if (e.name !== "AbortError") alert("保存できませんでした: " + e.message); }
     return;
   }
@@ -972,11 +1005,17 @@ $("save").onclick = async () => {
   download(blob, srcName);
   markSaved(text);
 };
-$("open").onclick = () => {
+async function loadInputFile(fl) { src.value = await fl.text(); srcName = fl.name; markSaved(); render(); }
+$("open").onclick = async () => {
   if (isDirty() && !confirm("保存していない変更があります。破棄して別のファイルを開きますか？")) return;
+  if (window.showOpenFilePicker) {
+    try { const [h] = await showOpenFilePicker({ ...PICKER, ...pickerPlace("inputs") }); lastHandle.inputs = h; await loadInputFile(await h.getFile()); }
+    catch (e) { if (e.name !== "AbortError") alert("開けませんでした: " + e.message); }
+    return;
+  }
   $("file").click();
 };
-$("file").onchange = async e => { const fl = e.target.files[0]; if (fl) { src.value = await fl.text(); srcName = fl.name; markSaved(); render(); } e.target.value = ""; };
+$("file").onchange = async e => { const fl = e.target.files[0]; if (fl) await loadInputFile(fl); e.target.value = ""; };
 
 function flash(msg) { const el = $("info"), old = el.textContent; el.textContent = msg; setTimeout(() => el.textContent = old, 2000); }
 
