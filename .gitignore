@@ -1,0 +1,13 @@
+# exported drawings and saved sources
+*.pptx
+*.png
+*.svg
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+
+# local-only files
+private/

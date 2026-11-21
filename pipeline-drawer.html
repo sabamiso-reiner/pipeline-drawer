@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline Drawer</title>
+<style>
+  :root { --bg:#f6f7f9; --panel:#ffffff; --border:#d6d9de; --text:#1d2330; --muted:#677084; --accent:#0a8f4a; --err:#c62828; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", "メイリオ", Meiryo, sans-serif; display: flex; flex-direction: column; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; }
+  header .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+  button, select { font: inherit; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); cursor: pointer; }
+  button:hover, select:hover { border-color: var(--accent); }
+  label.size { display: inline-flex; align-items: center; gap: 4px; }
+  label.size input[type=range] { width: 90px; accent-color: var(--accent); }
+  label.size input[type=number] { width: 64px; font: inherit; padding: 3px 4px; border: 1px solid var(--border); border-radius: 6px; }
+  .menu { position: relative; }
+  .menu-list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; min-width: 230px; max-width: calc(100vw - 16px); padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.15); display: flex; flex-direction: column; }
+  .menu-list[hidden] { display: none; }
+  .menu-list button { border: 0; border-radius: 5px; text-align: left; padding: 6px 10px; background: transparent; }
+  .menu-list button:hover, .menu-list button:focus-visible { background: #e8f5ee; outline: none; }
+  .menu-list hr { border: 0; border-top: 1px solid var(--border); margin: 4px 2px; }
+  dialog { border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; min-width: min(360px, calc(100vw - 32px)); color: var(--text); background: var(--panel); }
+  dialog::backdrop { background: rgba(0,0,0,.25); }
+  dialog h2 { font-size: 15px; margin: 0 0 10px; }
+  dialog .muted { color: var(--muted); font-size: 12.5px; margin: 6px 0; }
+  dialog form { text-align: right; margin-top: 10px; }
+  #tplList { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow: auto; }
+  #tplList li { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #eee; }
+  #tplList li span { flex: 1; overflow-wrap: anywhere; }
+  #tplList button { color: var(--err); }
+  #tour { position: fixed; inset: 0; z-index: 100; }
+  #tourHole { position: fixed; border-radius: 8px; box-shadow: 0 0 0 4px var(--accent), 0 0 0 9999px rgba(0,0,0,.45); transition: all .2s ease; pointer-events: none; }
+  #tourPop { position: fixed; width: min(380px, calc(100vw - 16px)); background: var(--panel); border-radius: 10px; padding: 12px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.3); transition: top .2s ease, left .2s ease; }
+  #tourStep { color: var(--muted); font-size: 12px; }
+  #tourPop h3 { margin: 2px 0 6px; font-size: 15px; }
+  #tourText { font-size: 13px; line-height: 1.6; }
+  #tourText ul { margin: 4px 0; padding-left: 1.3em; }
+  #tourText code { font-family: Consolas, monospace; background: #f1f3f5; border-radius: 4px; padding: 0 3px; }
+  #tourNav { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
+  #tourNav span { flex: 1; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { flex: 1; display: grid; grid-template-columns: minmax(320px, 38%) 1fr; min-height: 0; }
+  #left { display: flex; flex-direction: column; border-right: 1px solid var(--border); min-height: 0; }
+  #src { flex: 1; width: 100%; resize: none; border: 0; padding: 10px 12px; font: 13px/1.55 Consolas, "BIZ UDGothic", "MS Gothic", monospace; background: #fff; color: var(--text); outline: none; tab-size: 4; white-space: pre; }
+  #errors { color: var(--err); font-size: 12px; padding: 4px 12px; max-height: 90px; overflow: auto; background: #fff5f5; border-top: 1px solid var(--border); }
+  #errors:empty { display: none; }
+  details { border-top: 1px solid var(--border); background: var(--panel); max-height: 45%; overflow: auto; }
+  summary { padding: 6px 12px; cursor: pointer; color: var(--muted); }
+  #help { padding: 0 12px 10px; font-size: 12.5px; }
+  #help code, #help pre { font-family: Consolas, monospace; background: #f1f3f5; border-radius: 4px; }
+  #help code { padding: 0 3px; }
+  #help pre { padding: 6px 8px; margin: 4px 0; white-space: pre-wrap; }
+  #help table { border-collapse: collapse; }
+  #help td { border-top: 1px solid #eee; padding: 3px 6px; vertical-align: top; }
+  #right { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  #stage { flex: 1; overflow: auto; padding: 20px; background:
+      linear-gradient(45deg, #eef0f3 25%, transparent 25%) 0 0/16px 16px,
+      linear-gradient(-45deg, #eef0f3 25%, transparent 25%) 0 8px/16px 16px,
+      linear-gradient(45deg, transparent 75%, #eef0f3 75%) 8px -8px/16px 16px,
+      linear-gradient(-45deg, transparent 75%, #eef0f3 75%) -8px 0/16px 16px, #fff; }
+  #preview svg { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.15); display: block; }
+  #status { padding: 4px 12px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); background: var(--panel); display: flex; gap: 16px; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; grid-template-rows: 50% 50%; } }
+</style>
+<script defer src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>Pipeline Drawer</h1>
+  <select id="preset" title="テンプレートを読み込む・保存する・削除する">
+    <option value="">テンプレート…</option>
+    <optgroup label="組み込み">
+      <option value="five">理想的な5段パイプライン</option>
+      <option value="branch">分岐予測ミスとフラッシュ</option>
+      <option value="hazard">データハザードとバブル</option>
+      <option value="ooo">アウトオブオーダーのステージ（1行）</option>
+      <option value="blank">空のテンプレート</option>
+    </optgroup>
+    <optgroup id="userTpl" label="マイテンプレート"></optgroup>
+    <optgroup label="管理">
+      <option value="@save">＋ 今の内容をテンプレートとして保存…</option>
+      <option value="@delete">マイテンプレートを削除…</option>
+    </optgroup>
+  </select>
+  <button id="open" title="保存しておいた .txt を左の入力欄に読み込みます（今の内容は置き換わります）">入力テキストを開く</button>
+  <button id="save" title="左の入力欄の内容を .txt で保存します。後で開くと続きから編集できます">入力テキストを保存</button>
+  <span class="sep"></span>
+  <label>拡大 <select id="zoom"><option value="fit" selected>全体</option><option>0.5</option><option>0.75</option><option>1</option><option>1.5</option><option>2</option></select></label>
+  <span class="sep"></span>
+  <label class="size" title="ステージ1つの横幅（set slotW）">幅 <input type="range" id="slotWR" min="30" max="300" step="1"><input type="number" id="slotWN" min="10" max="1000" step="1"></label>
+  <label class="size" title="1行の高さ（set rowH）">高さ <input type="range" id="rowHR" min="10" max="150" step="0.5"><input type="number" id="rowHN" min="5" max="500" step="0.5"></label>
+  <button id="sizeReset" title="幅と高さを既定値に戻す（set 行から slotW / rowH を削除）">既定に戻す</button>
+  <span class="sep"></span>
+  <div class="menu" id="exMenu">
+    <button id="exBtn" class="primary" aria-haspopup="menu" aria-expanded="false">図を書き出し ▾</button>
+    <div class="menu-list" role="menu" hidden>
+      <button role="menuitem" id="exPptx">PPTX で保存（編集可能）</button>
+      <button role="menuitem" id="exPng">PNG で保存</button>
+      <button role="menuitem" id="exSvg">SVG で保存</button>
+      <hr>
+      <button role="menuitem" id="cpPng">PNG をクリップボードにコピー</button>
+    </div>
+  </div>
+  <button id="helpBtn" title="画面の各部分の使い方を順番に説明します">？ 使い方</button>
+  <input type="file" id="file" accept=".txt" hidden>
+</header>
+<main>
+  <section id="left">
+    <textarea id="src" spellcheck="false"></textarea>
+    <div id="errors"></div>
+    <details>
+      <summary>記法リファレンス</summary>
+      <div id="help">
+        <p>座標は <b>x = スロット（サイクル）</b>、<b>y = 行</b>。行 k（1始まり）は y = k−1 〜 k の範囲。小数OK。プレビュー上でマウスを動かすと座標が下に出ます。</p>
+        <p><b>命令行</b>：<code>ラベル | 種類 | ステージ列</code>（種類は省略可）</p>
+        <pre>1 lw r1, 0(r2) | load   | IF ID EX MEM WB
+2 （誤った経路） | wrong  | @1 IF ID {flush}
+3              | normal | @2 IF {bubble}*2 ID EX ... WB</pre>
+        <table>
+          <tr><td><code>@n</code></td><td>スロット n から開始</td></tr>
+          <tr><td><code>IF</code></td><td>ステージ（既定スタイル <code>stage</code>）</td></tr>
+          <tr><td><code>EX{hl}</code></td><td>スタイル指定付きステージ</td></tr>
+          <tr><td><code>EX{#ff8800}</code> / <code>EX{red}</code></td><td>その円柱だけ色を直接指定（凡例には出ない。暗い色なら文字は白）</td></tr>
+          <tr><td><code>{flush}</code></td><td>ラベル無しの円柱</td></tr>
+          <tr><td><code>X*3</code></td><td>3回繰り返し</td></tr>
+          <tr><td><code>...</code> / <code>.</code></td><td>「・・・」/「・」（連続する <code>...</code> は1つにまとまる）</td></tr>
+          <tr><td><code>-</code></td><td>空きスロット</td></tr>
+        </table>
+        <p><b>定義・注釈</b></p>
+        <table>
+          <tr><td><code>type 名前 fill=#d7e4bd text=#000 legend="ロード命令"</code></td><td>左ラベル列の種類（四角の凡例）</td></tr>
+          <tr><td><code>style 名前 fill=#404040 text=#fff legend="フラッシュ"</code></td><td>ステージの見た目（円柱の凡例）。組込: stage, flush, bubble, hl</td></tr>
+          <tr><td><code>set slotW=95 rowH=30.5 ...</code></td><td>寸法・フォント等（下記）</td></tr>
+          <tr><td><code>vline 0 1 6</code></td><td>縦の破線</td></tr>
+          <tr><td><code>vline 3 top="t1" bottom="検証終了" color=#c00000 size=20</code></td><td>破線の上・下に文字（<code>\n</code> で改行。color は線と文字の色）</td></tr>
+          <tr><td><code>text x y "文字\n2行目" color=#f00 size=24 align=left|center|right border=#2e75b6 bold</code></td><td>注釈テキスト（y は縦中心）</td></tr>
+          <tr><td><code>arrow x,y -> x,y -> x,y color=#4472c4 heads=end|start|both|none</code></td><td>折れ線矢印</td></tr>
+          <tr><td><code>brace y1 y2 x "ラベル" color=#0070c0</code></td><td>右側の括弧＋ラベル</td></tr>
+          <tr><td><code>legend x y</code> / <code>legend off</code></td><td>凡例の位置（左上）</td></tr>
+          <tr><td><code>caption "図の説明"</code></td><td>図の下のキャプション</td></tr>
+          <tr><td><code>//</code> または行頭 <code>#</code></td><td>コメント</td></tr>
+        </table>
+        <p><b>set のキー</b>：<code>slotW rowH labelW(=命令名の枠の最小幅。長い名前は自動で広がる) labelGap fontSize stageFontSize legendSize legendGap font stageFont cylH cap stroke strokeW rowBorder rowBorderW axis(=cycle|none) labels(=on|off) slots pad pptx(=4:3|16:9) pptxX pptxY pptxW</code></p>
+      </div>
+    </details>
+  </section>
+  <section id="right">
+    <div id="stage"><div id="preview"></div></div>
+    <div id="status"><span id="coord">x=–, y=–</span><span id="info"></span></div>
+  </section>
+</main>
+<div id="tour" hidden>
+  <div id="tourHole"></div>
+  <div id="tourPop" role="dialog" aria-live="polite">
+    <div id="tourStep"></div>
+    <h3 id="tourTitle"></h3>
+    <div id="tourText"></div>
+    <div id="tourNav">
+      <button id="tourClose">閉じる</button>
+      <span></span>
+      <button id="tourPrev">← 戻る</button>
+      <button id="tourNext" class="primary">次へ →</button>
+    </div>
+  </div>
+</div>
+<dialog id="tplDlg">
+  <h2>マイテンプレートを削除</h2>
+  <ul id="tplList"></ul>
+  <p id="tplEmpty" class="muted">保存したテンプレートはありません。</p>
+  <p class="muted">組み込みのテンプレートは削除できません。</p>
+  <form method="dialog"><button>閉じる</button></form>
+</dialog>
+
+<script>
+"use strict";
+// ============================================================ presets
+const PRESETS = {
+five: `// 理想的な5段パイプライン（1サイクルに1命令ずつ完了）
+type normal fill=#ffffff legend="命令"
+
+1 lw  r1, 0(r2)    | normal | IF ID EX MEM WB
+2 add r3, r4, r5   | normal | @1 IF ID EX MEM WB
+3 sub r6, r7, r8   | normal | @2 IF ID EX MEM WB
+4 and r9, r10, r11 | normal | @3 IF ID EX MEM WB
+5 or  r12, r13, r14 | normal | @4 IF ID EX MEM WB
+
+vline 4 top="パイプラインが満杯"
+legend 9.6 0
+`,
+branch: `// 分岐予測ミスによるフラッシュ
+type  normal fill=#ffffff legend="通常命令"
+type  branch fill=#dbe5f1 legend="分岐命令"
+type  wrong  fill=#d9d9d9 legend="誤った経路の命令"
+style flush  fill=#404040 legend="フラッシュ"
+
+1 add r1, r2, r3    | normal | IF ID EX MEM WB
+2 beq r1, r0, L     | branch | @1 IF ID EX MEM WB
+3 （誤った経路）     | wrong  | @2 IF ID {flush}
+4 （誤った経路）     | wrong  | @3 IF {flush}
+5 L: sub r4, r5, r6 | normal | @4 IF ID EX MEM WB
+
+vline 4 top="予測ミス判明" color=#c00000
+legend 9.6 0
+`,
+hazard: `// ロード直後の使用によるストール（バブル）
+type  normal fill=#ffffff legend="通常命令"
+type  load   fill=#fde9d9 legend="ロード命令"
+style bubble fill=#ffffff legend="バブル"
+
+1 lw  r1, 0(r2)   | load   | IF ID EX MEM WB
+2 add r3, r1, r4  | normal | @1 IF ID {bubble} EX MEM WB
+3 sub r5, r6, r7  | normal | @2 IF {bubble} ID EX MEM WB
+4 or  r8, r9, r10 | normal | @4 IF ID EX MEM WB
+
+arrow 4,0.75 -> 4,1.25 color=#0070c0
+text 5.3 0.5 "r1 をフォワーディング" color=#0070c0 size=18
+legend 9.6 0
+`,
+ooo: `// 1行だけのステージ図（ラベル列・軸なし）
+set labels=off axis=none slotW=150 rowH=72 cylH=1 stageFontSize=30 fontSize=28
+style hl fill=#e46c0a
+
+| IF ID RN DS IS EX{hl} WB CM
+
+caption "アウトオブオーダーパイプラインのステージ"
+`,
+blank: `// 新しい図
+type  normal fill=#ffffff legend="通常命令"
+style flush  fill=#404040 legend="フラッシュ"
+
+1 | normal | IF ID EX MEM WB
+2 | normal | @1 IF ID EX MEM WB
+3 | normal | @2 IF ID {flush}
+
+vline 0
+`};
+
+// ============================================================ parser
+const DEFAULTS = {
+  slotW: 95, rowH: 30.5, labelW: 230, labelGap: 3, fontSize: 22, stageFontSize: 21,
+  legendSize: 26, legendGap: 1.3, font: "メイリオ", stageFont: "Times New Roman",
+  cylH: 0.9, cap: 0.3, stroke: "#000000", strokeW: 1.2, rowBorder: "#1f3864", rowBorderW: 2,
+  axis: "cycle", labels: "on", slots: 0, pad: 12, pptx: "4:3", pptxX: null, pptxY: null, pptxW: null,
+};
+
+const TOKEN_RE = /([A-Za-z_][\w.-]*)=("(?:[^"\\]|\\.)*"|\S+)|"((?:[^"\\]|\\.)*)"|(\S+)/g;
+const unq = s => s.replace(/\\n/g, "\n").replace(/\\(.)/g, "$1");
+
+function tokenize(line) {
+  const pos = [], kv = {};
+  for (const m of line.matchAll(TOKEN_RE)) {
+    if (m[1] !== undefined) { let v = m[2]; if (v.startsWith('"')) v = unq(v.slice(1, -1)); kv[m[1]] = v; }
+    else if (m[3] !== undefined) pos.push({ str: unq(m[3]), quoted: true });
+    else pos.push({ str: m[4], quoted: false });
+  }
+  return { pos, kv };
+}
+
+function num(v, what) {
+  const n = Number(v);
+  if (v === undefined || v === "" || !isFinite(n)) throw new Error(`${what} に数値が必要です（"${v ?? ""}"）`);
+  return n;
+}
+
+function stripComment(line) {
+  if (/^\s*#/.test(line)) return "";
+  // remove // comments that are outside quotes
+  let q = false;
+  for (let i = 0; i < line.length - 1; i++) {
+    if (line[i] === '"' && line[i - 1] !== "\\") q = !q;
+    if (!q && line[i] === "/" && line[i + 1] === "/") return line.slice(0, i);
+  }
+  return line;
+}
+
+function parse(src) {
+  const D = { set: { ...DEFAULTS }, types: {}, styles: {}, legendOrder: [], rows: [], vlines: [], texts: [], arrows: [], braces: [], legend: null, legendOff: false, captions: [], errors: [] };
+  const defStyle = (name, o, builtin) => {
+    D.styles[name] = { fill: "#d9d9d9", text: "#000000", stroke: null, ...(D.styles[name] || {}), ...o };
+    if (!builtin && o.legend && !D.legendOrder.some(e => e.kind === "style" && e.name === name)) D.legendOrder.push({ kind: "style", name });
+  };
+  const defType = (name, o, builtin) => {
+    D.types[name] = { fill: "#ffffff", text: "#000000", ...(D.types[name] || {}), ...o };
+    if (!builtin && o.legend && !D.legendOrder.some(e => e.kind === "type" && e.name === name)) D.legendOrder.push({ kind: "type", name });
+  };
+  defStyle("stage", { fill: "#d9d9d9" }, true);
+  defStyle("flush", { fill: "#404040", text: "#ffffff" }, true);
+  defStyle("bubble", { fill: "#ffffff" }, true);
+  defStyle("hl", { fill: "#e46c0a" }, true);
+  defType("normal", { fill: "#ffffff" }, true);
+
+  const pendingRows = [];
+  src.split(/\r?\n/).forEach((raw, i) => {
+    const line = stripComment(raw).trim();
+    if (!line) return;
+    try {
+      if (line.includes("|") && !/^(text|caption|brace)\b/.test(line)) { pendingRows.push({ line, ln: i + 1 }); return; }
+      const { pos, kv } = tokenize(line);
+      const cmd = pos.shift().str.toLowerCase();
+      switch (cmd) {
+        case "set":
+          for (const [k, v] of Object.entries(kv)) {
+            if (!(k in DEFAULTS)) throw new Error(`set: 不明なキー "${k}"`);
+            D.set[k] = (typeof DEFAULTS[k] === "number" || ["pptxX", "pptxY", "pptxW"].includes(k)) ? num(v, k) : v;
+          }
+          break;
+        case "type": case "style": {
+          if (!pos.length) throw new Error(`${cmd}: 名前がありません`);
+          const o = {};
+          for (const k of ["fill", "text", "stroke", "legend"]) if (kv[k] !== undefined) o[k] = kv[k];
+          (cmd === "type" ? defType : defStyle)(pos[0].str, o);
+          break;
+        }
+        case "vline":
+          for (const p of pos) D.vlines.push({ x: num(p.str, "vline"), color: kv.color || null,
+            top: kv.top || "", bottom: kv.bottom || "", size: kv.size ? num(kv.size, "size") : null });
+          break;
+        case "text": {
+          if (pos.length < 3) throw new Error('text x y "文字" の形式です');
+          D.texts.push({ x: num(pos[0].str, "x"), y: num(pos[1].str, "y"), str: pos[2].str,
+            color: kv.color || "#000000", size: kv.size ? num(kv.size, "size") : null,
+            align: kv.align || "left", border: kv.border || null, fill: kv.fill || null,
+            bold: pos.slice(3).some(p => p.str === "bold") || kv.bold === "1" });
+          break;
+        }
+        case "arrow": {
+          const pts = pos.filter(p => p.str !== "->").map(p => {
+            const m = p.str.match(/^(-?[\d.]+),(-?[\d.]+)$/);
+            if (!m) throw new Error(`arrow: 座標 "${p.str}" は x,y の形式で書いてください`);
+            return [Number(m[1]), Number(m[2])];
+          });
+          if (pts.length < 2) throw new Error("arrow: 2点以上必要です");
+          D.arrows.push({ pts, color: kv.color || "#4472c4", width: kv.width ? num(kv.width, "width") : 2, heads: kv.heads || "end", dash: kv.dash === "1" || pos.some(p => p.str === "dash") });
+          break;
+        }
+        case "brace": {
+          if (pos.length < 3) throw new Error('brace y1 y2 x "ラベル" の形式です');
+          D.braces.push({ y1: num(pos[0].str, "y1"), y2: num(pos[1].str, "y2"), x: num(pos[2].str, "x"), label: pos[3] ? pos[3].str : "",
+            color: kv.color || "#0070c0", size: kv.size ? num(kv.size, "size") : null });
+          break;
+        }
+        case "legend":
+          if (pos[0] && pos[0].str === "off") D.legendOff = true;
+          else D.legend = { x: num(pos[0]?.str, "legend x"), y: num(pos[1]?.str, "legend y") };
+          break;
+        case "caption":
+          if (!pos.length) throw new Error('caption "文字" の形式です');
+          D.captions.push({ str: pos[0].str, size: kv.size ? num(kv.size, "size") : null, color: kv.color || "#000000" });
+          break;
+        default:
+          throw new Error(`不明なコマンド "${cmd}"（命令行なら | で区切ってください）`);
+      }
+    } catch (e) { D.errors.push(`${i + 1}行目: ${e.message}`); }
+  });
+
+  // rows are parsed after all type/style definitions so order does not matter
+  for (const { line, ln } of pendingRows) {
+    try { D.rows.push(parseRow(line, D, msg => D.errors.push(`${ln}行目: ${msg}`))); }
+    catch (e) { D.errors.push(`${ln}行目: ${e.message}`); D.rows.push({ label: "", type: "normal", cells: [], end: 0 }); }
+  }
+  return D;
+}
+
+// problems inside a row (unknown type/style, half-typed token) are reported via warn() and drawn with defaults,
+// so the rest of the row stays visible while the user is still typing
+function parseRow(line, D, warn = () => {}) {
+  const parts = line.split("|").map(s => s.trim());
+  let label, type = "normal", stages;
+  if (parts.length === 2) [label, stages] = parts;
+  else if (parts.length === 3) { [label, type, stages] = parts; type = type || "normal"; }
+  else throw new Error("命令行は「ラベル | 種類 | ステージ列」の形式です");
+  if (!D.types[type]) { warn(`種類 "${type}" が定義されていません（type ${type} fill=... を追加）`); type = "normal"; }
+  const cells = [];
+  let slot = 0;
+  for (const tok of stages.split(/\s+/).filter(Boolean)) {
+    if (/^@-?[\d.]+$/.test(tok)) { slot = Number(tok.slice(1)); continue; }
+    if (tok === "-" || tok === "_") { slot++; continue; }
+    if (tok === "..." || tok === "…" || tok === "・・・") {
+      const prev = cells[cells.length - 1];
+      if (prev && prev.kind === "dots" && prev.n === 3 && prev.slot + prev.span === slot) prev.span++;
+      else cells.push({ kind: "dots", slot, span: 1, n: 3 });
+      slot++; continue;
+    }
+    if (tok === "." || tok === "・") { cells.push({ kind: "dots", slot, span: 1, n: 1 }); slot++; continue; }
+    let m = tok.match(/^([^{}*]*)(?:\{(#[0-9a-fA-F]{3,8}|[\w-]+)\})?(?:\*(\d+))?$/);
+    if (!m) {
+      // e.g. "EX{#f" or "EX{#f}" while typing: keep the stage, ignore the broken {...} part
+      warn(`ステージ "${tok}" を解釈できません（{...} の書きかけ？既定の色で表示しています）`);
+      const lm = tok.match(/^([^{}*]*)/), rm = tok.match(/\}\*(\d+)$/);
+      m = [tok, lm[1], null, rm ? rm[1] : null];
+    }
+    let style = m[2] || "stage";
+    // a color written directly ({#ff8800} / {red}) becomes an unnamed style; text turns white on dark fills
+    if (!D.styles[style] && CSS.supports("color", style)) {
+      const c = normColor(style), rgb = /^#[0-9a-f]{6}$/i.test(c) ? [1, 3, 5].map(i => parseInt(c.substr(i, 2), 16)) : [255, 255, 255];
+      const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+      D.styles[style] = { fill: style, text: lum < 128 ? "#ffffff" : "#000000", stroke: null };
+    }
+    if (!D.styles[style]) {
+      warn(`スタイル "${style}" が定義されていません（style ${style} fill=... を追加するか、{#ff8800} のように色を直接書いてください）`);
+      style = "stage";
+    }
+    const rep = m[3] ? Number(m[3]) : 1;
+    for (let r = 0; r < rep; r++) cells.push({ kind: "stage", slot: slot++, label: m[1], style });
+  }
+  return { label, type, cells, end: slot };
+}
+
+// ============================================================ layout -> primitives (px)
+const _ctx = document.createElement("canvas").getContext("2d");
+function fam(font) {
+  return /times|serif|century|mincho|明朝/i.test(font) ? `"${font}", "Times New Roman", serif`
+    : `"${font}", Meiryo, "Hiragino Sans", "Noto Sans JP", sans-serif`;
+}
+function measure(str, size, font, bold) {
+  _ctx.font = `${bold ? "bold " : ""}${size}px ${fam(font)}`;
+  return _ctx.measureText(str).width;
+}
+function normColor(c) {
+  if (!c || c === "none") return "none";
+  _ctx.fillStyle = "#000000"; _ctx.fillStyle = c;
+  return _ctx.fillStyle; // #rrggbb (or rgba(...) for transparent)
+}
+function lighten(hex, t) {
+  const c = normColor(hex); if (!/^#[0-9a-f]{6}$/i.test(c)) return c;
+  const v = [1, 3, 5].map(i => parseInt(c.substr(i, 2), 16)).map(x => Math.round(x + (255 - x) * t));
+  return "#" + v.map(x => x.toString(16).padStart(2, "0")).join("");
+}
+
+function layout(D) {
+  const S = D.set, P = [];
+  const labelsOn = S.labels !== "off";
+  // label column: labelW is the minimum; widen it to fit the longest row label (6px left margin + right margin)
+  const longest = Math.max(0, ...D.rows.map(r => r.label ? measure(r.label, S.fontSize, S.font, false) : 0));
+  const lw = labelsOn ? Math.max(S.labelW, Math.ceil(longest + 6 + 10)) : 0, lg = labelsOn ? S.labelGap : 0;
+  const ox = lw + lg;
+  const X = x => ox + x * S.slotW, Y = y => y * S.rowH;
+  const n = D.rows.length;
+  const maxSlot = S.slots || Math.max(1, ...D.rows.map(r => r.end));
+  const h = S.rowH * S.cylH, rx = h * S.cap;
+
+  const txt = (x, y, str, o) => P.push({ k: "text", x, y, str, size: o.size, color: normColor(o.color || "#000"), font: o.font || S.font, bold: !!o.bold, anchor: o.anchor || "start",
+    w: measure(str, o.size, o.font || S.font, !!o.bold) });
+  const cyl = (x, y, w, style, label) => {
+    const st = D.styles[style];
+    P.push({ k: "cyl", x, y, w, h, rx, fill: normColor(st.fill), face: lighten(st.fill, 0.3), stroke: normColor(st.stroke || S.stroke), sw: S.strokeW,
+      label, color: normColor(st.text), size: S.stageFontSize, font: S.stageFont });
+  };
+
+  const bottom = Y(n), ay = S.axis !== "none" ? bottom + S.rowH * 0.45 : bottom;
+
+  // vlines first, so the stages drawn afterwards hide the parts they overlap
+  // labels above / below each vline (top="t1" bottom="検証終了"); multi-line labels grow away from the line
+  let labelBottom = ay;
+  for (const v of D.vlines) {
+    P.push({ k: "line", pts: [[X(v.x), Y(0)], [X(v.x), ay]], stroke: normColor(v.color || S.stroke), sw: S.strokeW, dash: true, heads: "none" });
+    const size = v.size || S.fontSize, lh = size * 1.2, color = v.color || "#000000";
+    if (v.top) {
+      const lines = v.top.split("\n");
+      lines.forEach((l, i) => txt(X(v.x), Y(0) - size * 0.7 - (lines.length - 1 - i) * lh, l, { size, color, anchor: "middle" }));
+    }
+    if (v.bottom) {
+      const lines = v.bottom.split("\n");
+      lines.forEach((l, i) => txt(X(v.x), ay + size * 0.7 + i * lh, l, { size, color, anchor: "middle" }));
+      labelBottom = Math.max(labelBottom, ay + size * 0.7 + (lines.length - 1) * lh + size * 0.5);
+    }
+  }
+
+  // instruction rows
+  D.rows.forEach((r, k) => {
+    const t = D.types[r.type];
+    if (labelsOn) {
+      P.push({ k: "rect", x: 0, y: Y(k), w: lw, h: S.rowH, fill: normColor(t.fill), stroke: normColor(S.rowBorder), sw: S.rowBorderW });
+      if (r.label) txt(6, Y(k) + S.rowH / 2, r.label, { size: S.fontSize, color: t.text });
+    }
+    const top = Y(k) + (S.rowH - h) / 2, cy = Y(k) + S.rowH / 2;
+    // right-to-left so that each stage's left face (hole) sits underneath the stage to its left
+    for (const c of [...r.cells].reverse()) {
+      if (c.kind === "stage") cyl(X(c.slot), top, S.slotW + rx, c.style, c.label);
+      else {
+        const span = c.span * S.slotW, cx = X(c.slot) + span / 2 + rx / 2;
+        const gap = Math.min(S.slotW * 0.42, span / 3.2), dr = Math.max(1.5, S.rowH * 0.085);
+        const xs = c.n === 1 ? [cx] : [cx - gap, cx, cx + gap];
+        for (const x of xs) P.push({ k: "dot", x, y: cy, r: dr, fill: normColor(S.stroke) });
+      }
+    }
+  });
+
+  // axis
+  if (S.axis !== "none") {
+    const ax2 = X(maxSlot) + S.slotW * 0.9;
+    P.push({ k: "line", pts: [[0, ay], [ax2, ay]], stroke: normColor(S.stroke), sw: 2.5, heads: "end" });
+    txt(ax2, ay - S.rowH * 0.5, S.axis, { size: S.fontSize, font: S.stageFont, anchor: "end" });
+  }
+
+  // legend
+  if (!D.legendOff && D.legendOrder.length) {
+    const lp = D.legend || { x: maxSlot + 0.6, y: 0 };
+    const sw = S.slotW * 1.1, sh = S.rowH * 0.8;
+    D.legendOrder.forEach((e, i) => {
+      const x = X(lp.x), y = Y(lp.y) + i * S.rowH * S.legendGap, def = (e.kind === "style" ? D.styles : D.types)[e.name];
+      if (e.kind === "style") {
+        const st = D.styles[e.name], lh = sh, lrx = lh * S.cap;
+        P.push({ k: "cyl", x, y, w: sw, h: lh, rx: lrx, fill: normColor(st.fill), face: lighten(st.fill, 0.3), stroke: normColor(st.stroke || S.stroke), sw: S.strokeW, label: "", color: "#000000", size: S.stageFontSize, font: S.stageFont });
+      } else {
+        P.push({ k: "rect", x, y, w: sw, h: sh, fill: normColor(def.fill), stroke: normColor(S.rowBorder), sw: S.rowBorderW });
+      }
+      txt(x + sw + 6, y + sh / 2, "：" + def.legend, { size: S.legendSize });
+    });
+  }
+
+  // arrows
+  for (const a of D.arrows)
+    P.push({ k: "line", pts: a.pts.map(([x, y]) => [X(x), Y(y)]), stroke: normColor(a.color), sw: a.width, heads: a.heads, dash: a.dash });
+
+  // text annotations (drawn after arrows so boxed text covers them)
+  for (const t of D.texts) {
+    const size = t.size || S.fontSize, lines = t.str.split("\n"), lh = size * 1.2;
+    const anchor = { left: "start", center: "middle", right: "end" }[t.align] || "start";
+    const ws = lines.map(l => measure(l, size, S.font, t.bold)), mw = Math.max(...ws);
+    const x = X(t.x), cy = Y(t.y);
+    if (t.border || t.fill) {
+      const bx = anchor === "start" ? x - 4 : anchor === "middle" ? x - mw / 2 - 4 : x - mw - 4;
+      P.push({ k: "rect", x: bx, y: cy - lines.length * lh / 2 - 3, w: mw + 8, h: lines.length * lh + 6,
+        fill: normColor(t.fill || "#ffffff"), stroke: t.border ? normColor(t.border) : "none", sw: 2 });
+    }
+    lines.forEach((l, i) => txt(x, cy + (i - (lines.length - 1) / 2) * lh, l, { size, color: t.color, bold: t.bold, anchor }));
+  }
+
+  // braces
+  for (const b of D.braces) {
+    const x = X(b.x), y1 = Y(b.y1), y2 = Y(b.y2), bw = S.slotW * 0.08, c = normColor(b.color);
+    P.push({ k: "line", pts: [[x - bw, y1], [x, y1], [x, y2], [x - bw, y2]], stroke: c, sw: 2, heads: "none" });
+    if (b.label) {
+      const size = b.size || S.legendSize, lines = b.label.split("\n"), lh = size * 1.2, cy = (y1 + y2) / 2;
+      lines.forEach((l, i) => txt(x + 10, cy + (i - (lines.length - 1) / 2) * lh, l, { size, color: c }));
+    }
+  }
+
+  // captions
+  let cyBase = Math.max(S.axis !== "none" ? ay : bottom, labelBottom) + S.rowH * 0.3;
+  for (const c of D.captions) {
+    const size = c.size || S.fontSize;
+    cyBase += size * 0.75;
+    txt((X(0) + X(maxSlot)) / 2 + rx / 2, cyBase, c.str, { size, color: c.color, anchor: "middle" });
+    cyBase += size * 0.6;
+  }
+
+  // bounds
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const add = (a, b, c, d) => { x0 = Math.min(x0, a); y0 = Math.min(y0, b); x1 = Math.max(x1, c); y1 = Math.max(y1, d); };
+  for (const p of P) {
+    if (p.k === "rect" || p.k === "cyl") add(p.x, p.y, p.x + p.w, p.y + p.h);
+    else if (p.k === "dot") add(p.x - p.r, p.y - p.r, p.x + p.r, p.y + p.r);
+    else if (p.k === "line") for (const [x, y] of p.pts) add(x - 6, y - 6, x + 6, y + 6);
+    else if (p.k === "text") {
+      const l = p.anchor === "start" ? p.x : p.anchor === "middle" ? p.x - p.w / 2 : p.x - p.w;
+      add(l, p.y - p.size * 0.65, l + p.w, p.y + p.size * 0.65);
+    }
+  }
+  if (!isFinite(x0)) { x0 = y0 = 0; x1 = y1 = 100; }
+  const pad = S.pad;
+  return { P, B: { x: x0 - pad, y: y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad }, grid: { ox, slotW: S.slotW, rowH: S.rowH } };
+}
+
+// ============================================================ SVG backend
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const f = v => Math.round(v * 100) / 100;
+
+function toSVG(L) {
+  const { P, B } = L;
+  const markers = new Map();
+  const mk = c => { if (!markers.has(c)) markers.set(c, "ah" + markers.size); return markers.get(c); };
+  const body = [];
+  for (const p of P) {
+    if (p.k === "rect") {
+      body.push(`<rect x="${f(p.x)}" y="${f(p.y)}" width="${f(p.w)}" height="${f(p.h)}" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.sw}"/>`);
+    } else if (p.k === "cyl") {
+      const ry = p.h / 2, xl = p.x + p.rx, xr = p.x + p.w - p.rx, y = p.y, yb = p.y + p.h;
+      body.push(`<g><path d="M${f(xl)},${f(y)} H${f(xr)} A${f(p.rx)},${f(ry)} 0 0 1 ${f(xr)},${f(yb)} H${f(xl)} A${f(p.rx)},${f(ry)} 0 0 1 ${f(xl)},${f(y)} Z" fill="${p.fill}" stroke="${p.stroke}" stroke-width="${p.sw}"/>` +
+        `<ellipse cx="${f(xl)}" cy="${f(y + ry)}" rx="${f(p.rx)}" ry="${f(ry)}" fill="${p.face}" stroke="${p.stroke}" stroke-width="${p.sw}"/>` +
+        (p.label ? `<text x="${f((xl + p.rx + xr) / 2)}" y="${f(y + ry)}" font-family='${esc(fam(p.font))}' font-size="${p.size}" font-weight="bold" fill="${p.color}" text-anchor="middle" dominant-baseline="central">${esc(p.label)}</text>` : "") + `</g>`);
+    } else if (p.k === "dot") {
+      body.push(`<circle cx="${f(p.x)}" cy="${f(p.y)}" r="${f(p.r)}" fill="${p.fill}"/>`);
+    } else if (p.k === "line") {
+      const id = p.heads && p.heads !== "none" ? mk(p.stroke) : null;
+      const ms = id && (p.heads === "start" || p.heads === "both") ? ` marker-start="url(#${id})"` : "";
+      const me = id && (p.heads === "end" || p.heads === "both") ? ` marker-end="url(#${id})"` : "";
+      body.push(`<polyline points="${p.pts.map(([x, y]) => f(x) + "," + f(y)).join(" ")}" fill="none" stroke="${p.stroke}" stroke-width="${p.sw}"${p.dash ? ' stroke-dasharray="4 4"' : ""} stroke-linejoin="miter"${ms}${me}/>`);
+    } else if (p.k === "text") {
+      body.push(`<text x="${f(p.x)}" y="${f(p.y)}" font-family='${esc(fam(p.font))}' font-size="${p.size}"${p.bold ? ' font-weight="bold"' : ""} fill="${p.color}" text-anchor="${p.anchor}" dominant-baseline="central" xml:space="preserve">${esc(p.str)}</text>`);
+    }
+  }
+  const defs = [...markers].map(([c, id]) => `<marker id="${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(B.x)} ${f(B.y)} ${f(B.w)} ${f(B.h)}" width="${f(B.w)}" height="${f(B.h)}"><defs>${defs}</defs>${body.join("")}</svg>`;
+}
+
+// ============================================================ PPTX backend (native, editable shapes)
+async function toPPTX(L, S) {
+  if (typeof PptxGenJS === "undefined" || typeof JSZip === "undefined") throw new Error("PPTX ライブラリを読み込めませんでした（インターネット接続が必要です）");
+  const { P, B } = L;
+  const pres = new PptxGenJS();
+  const wide = S.pptx === "16:9";
+  pres.layout = wide ? "LAYOUT_WIDE" : "LAYOUT_4x3";
+  const SW = wide ? 13.333 : 10, SH = 7.5, M = 0.2;
+  let s = (S.pptxW || SW - 2 * M) / B.w;
+  if (!S.pptxW && B.h * s > SH - 2 * M) s = (SH - 2 * M) / B.h;
+  const left = S.pptxX ?? (SW - B.w * s) / 2, top = S.pptxY ?? (SH - B.h * s) / 2;
+  const X = v => left + (v - B.x) * s, Y = v => top + (v - B.y) * s, Ln = v => v * s;
+  const pt = px => Math.max(0.25, px * s * 72);
+  const hex = c => (c && c.startsWith("#") ? c.slice(1).toUpperCase() : "000000");
+  const fillOf = c => (c === "none" || !c.startsWith("#")) ? { type: "none" } : { color: hex(c) };
+  const lineOf = (c, w, extra = {}) => (c === "none" ? { type: "none" } : { color: hex(c), width: pt(w), ...extra });
+  const slide = pres.addSlide();
+  const T = pres.ShapeType;
+  let n = 0;
+  const name = k => `${k} ${++n}`;
+
+  for (const p of P) {
+    if (p.k === "rect") {
+      slide.addShape(T.rect, { x: X(p.x), y: Y(p.y), w: Ln(p.w), h: Ln(p.h), fill: fillOf(p.fill), line: lineOf(p.stroke, p.sw), objectName: name("Rect") });
+    } else if (p.k === "cyl") {
+      // "can" rotated 270deg -> face on the left; pre-rotation box is (h x w)
+      const cx = X(p.x + p.w / 2), cy = Y(p.y + p.h / 2);
+      slide.addShape(T.can, { x: cx - Ln(p.h) / 2, y: cy - Ln(p.w) / 2, w: Ln(p.h), h: Ln(p.w), rotate: 270,
+        fill: fillOf(p.fill), line: lineOf(p.stroke, p.sw), objectName: name("Stage") });
+      if (p.label) {
+        const bx = p.x + 2 * p.rx, bw = p.w - 3 * p.rx;
+        slide.addText(p.label, { x: X(bx), y: Y(p.y), w: Ln(bw), h: Ln(p.h), margin: 0, align: "center", valign: "middle",
+          fontFace: p.font, fontSize: pt(p.size), bold: true, color: hex(p.color), isTextBox: true, wrap: false, objectName: name("StageLabel") });
+      }
+    } else if (p.k === "dot") {
+      slide.addShape(T.ellipse, { x: X(p.x - p.r), y: Y(p.y - p.r), w: Ln(2 * p.r), h: Ln(2 * p.r), fill: fillOf(p.fill), line: { type: "none" }, objectName: name("Dot") });
+    } else if (p.k === "line") {
+      const segs = p.pts.length - 1;
+      for (let i = 0; i < segs; i++) {
+        const [xa, ya] = p.pts[i], [xb, yb] = p.pts[i + 1];
+        const extra = {};
+        if (p.dash) extra.dashType = "dash";
+        if (i === 0 && (p.heads === "start" || p.heads === "both")) extra.beginArrowType = "triangle";
+        if (i === segs - 1 && (p.heads === "end" || p.heads === "both")) extra.endArrowType = "triangle";
+        slide.addShape(T.line, { x: X(Math.min(xa, xb)), y: Y(Math.min(ya, yb)), w: Ln(Math.abs(xb - xa)), h: Ln(Math.abs(yb - ya)),
+          flipH: xb < xa, flipV: yb < ya, line: lineOf(p.stroke, p.sw, extra), objectName: name("Line") });
+      }
+    } else if (p.k === "text") {
+      const w = p.w * 1.12 + 4, h = p.size * 1.4;
+      const lx = p.anchor === "start" ? p.x : p.anchor === "middle" ? p.x - w / 2 : p.x - w;
+      slide.addText(p.str, { x: X(lx), y: Y(p.y - h / 2), w: Ln(w), h: Ln(h), margin: 0, valign: "middle",
+        align: { start: "left", middle: "center", end: "right" }[p.anchor], fontFace: p.font, fontSize: pt(p.size), bold: p.bold,
+        color: hex(p.color), isTextBox: true, wrap: false, objectName: name("Text") });
+    }
+  }
+
+  // pptxgenjs cannot set the can's adjust value: patch it so the face depth matches the preview
+  const buf = await pres.write({ outputType: "arraybuffer" });
+  const zip = await JSZip.loadAsync(buf);
+  const adj = Math.round(S.cap * 2 * 100000);
+  for (const file of Object.keys(zip.files).filter(k => /^ppt\/slides\/slide\d+\.xml$/.test(k))) {
+    let xml = await zip.file(file).async("string");
+    xml = xml.replace(/<a:prstGeom prst="can">\s*(<a:avLst\s*\/>|<a:avLst>\s*<\/a:avLst>)/g,
+      `<a:prstGeom prst="can"><a:avLst><a:gd name="adj" fmla="val ${adj}"/></a:avLst>`);
+    zip.file(file, xml);
+  }
+  // repack without folder entries ([Content_Types].xml first), which some cloud editors reject
+  const out = new JSZip();
+  const names = Object.keys(zip.files).filter(k => !zip.files[k].dir)
+    .sort((a, b) => (b === "[Content_Types].xml") - (a === "[Content_Types].xml"));
+  for (const k of names) out.file(k, await zip.file(k).async("uint8array"), { createFolders: false });
+  return out.generateAsync({ type: "blob", compression: "DEFLATE", mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+}
+
+// ============================================================ UI
+const $ = id => document.getElementById(id);
+const src = $("src"), preview = $("preview"), errors = $("errors");
+let current = null;
+const LS_KEY = "pipeline-drawer-src";
+
+// ---- unsaved-changes tracking: compare the input with the text last saved to / opened from a .txt file
+const LS_SAVED = "pipeline-drawer-saved";
+let savedText = null;
+const isDirty = () => savedText !== null && src.value !== savedText;
+function markSaved(text = src.value) {
+  savedText = text;
+  try { localStorage.setItem(LS_SAVED, text); } catch (e) { /* storage unavailable */ }
+  updateDirty();
+}
+function updateDirty() { document.title = (isDirty() ? "● " : "") + "Pipeline Drawer"; }
+window.addEventListener("beforeunload", e => { if (isDirty()) { e.preventDefault(); e.returnValue = ""; } });
+
+function render() {
+  const D = parse(src.value);
+  const L = layout(D);
+  current = { D, L };
+  preview.innerHTML = toSVG(L);
+  const svg = preview.querySelector("svg");
+  const zv = $("zoom").value, st = $("stage");
+  const z = zv === "fit" ? Math.min((st.clientWidth - 44) / L.B.w, (st.clientHeight - 44) / L.B.h, 2) : Number(zv);
+  svg.setAttribute("width", f(L.B.w * z)); svg.setAttribute("height", f(L.B.h * z));
+  syncSizeControls(D.set);
+  errors.textContent = D.errors.join("\n");
+  errors.style.whiteSpace = "pre-wrap";
+  $("info").textContent = `${D.rows.length} 行 / ${Math.round(L.B.w)}×${Math.round(L.B.h)} px`;
+  try { localStorage.setItem(LS_KEY, src.value); } catch (e) { /* storage unavailable */ }
+  updateDirty();
+}
+
+// ---- size controls (slotW / rowH) <-> "set" line in the source
+const SIZE_KEYS = ["slotW", "rowH"];
+function syncSizeControls(S) {
+  for (const k of SIZE_KEYS) for (const sfx of ["R", "N"]) {
+    const el = $(k + sfx);
+    if (document.activeElement !== el) el.value = S[k];
+  }
+}
+// rewrite key=value in the source: replace existing "set ... key=" entries, else append to the last set line, else add a set line on top
+function setKeyInSource(text, key, val) {
+  const lines = text.split(/\r?\n/), re = new RegExp(`(^|\\s)${key}=\\S+`);
+  let hit = false, lastSet = -1;
+  lines.forEach((ln, i) => {
+    const code = stripComment(ln);
+    if (!/^\s*set\b/i.test(code)) return;
+    lastSet = i;
+    if (re.test(code)) { lines[i] = code.replace(re, `$1${key}=${val}`) + ln.slice(code.length); hit = true; }
+  });
+  if (!hit) {
+    if (lastSet >= 0) {
+      const ln = lines[lastSet], code = stripComment(ln);
+      lines[lastSet] = code.replace(/\s*$/, "") + ` ${key}=${val}` + (ln.length > code.length ? " " + ln.slice(code.length) : "");
+    } else lines.unshift(`set ${key}=${val}`);
+  }
+  return lines.join("\n");
+}
+// remove key=value from every set line; drop set lines left empty
+function removeKeyInSource(text, key) {
+  const re = new RegExp(`\\s*\\b${key}=\\S+`, "g");
+  return text.split(/\r?\n/).flatMap(ln => {
+    const code = stripComment(ln);
+    if (!/^\s*set\b/i.test(code)) return [ln];
+    const nc = code.replace(re, "");
+    if (nc === code) return [ln];
+    if (/^\s*set\s*$/i.test(nc) && !ln.slice(code.length).trim()) return [];
+    return [nc + ln.slice(code.length)];
+  }).join("\n");
+}
+$("sizeReset").onclick = () => {
+  let t = src.value;
+  for (const k of SIZE_KEYS) t = removeKeyInSource(t, k);
+  src.value = t;
+  render();
+};
+for (const k of SIZE_KEYS) for (const sfx of ["R", "N"]) {
+  $(k + sfx).addEventListener("input", e => {
+    const v = Number(e.target.value);
+    if (!isFinite(v) || v <= 0) return;
+    $(k + (sfx === "R" ? "N" : "R")).value = v;
+    src.value = setKeyInSource(src.value, k, v);
+    render();
+  });
+}
+
+let timer = 0;
+src.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(render, 120); });
+src.addEventListener("keydown", e => {
+  if (e.key === "Tab") { e.preventDefault(); const s = src.selectionStart; src.setRangeText("    ", s, src.selectionEnd, "end"); render(); }
+});
+$("zoom").addEventListener("change", render);
+window.addEventListener("resize", () => { if ($("zoom").value === "fit") render(); });
+// ---- templates: built-in PRESETS (read-only) + user templates kept in this browser's localStorage
+const LS_TPL = "pipeline-drawer-templates";
+const BUILTIN_NAMES = [...document.querySelectorAll('#preset optgroup:first-of-type option')].map(o => o.textContent);
+function loadUserTpl() {
+  try { const o = JSON.parse(localStorage.getItem(LS_TPL) || "{}"); return o && typeof o === "object" ? o : {}; } catch (e) { return {}; }
+}
+function storeUserTpl(o) {
+  try { localStorage.setItem(LS_TPL, JSON.stringify(o)); return true; }
+  catch (e) { alert("テンプレートを保存できませんでした（ブラウザの保存領域が使えません）: " + e.message); return false; }
+}
+function refreshTplMenu() {
+  const g = $("userTpl"), names = Object.keys(loadUserTpl());
+  g.replaceChildren(...names.map(n => Object.assign(document.createElement("option"), { value: "u:" + n, textContent: n })));
+  if (!names.length) g.append(Object.assign(document.createElement("option"), { disabled: true, textContent: "（まだありません）" }));
+  $("preset").querySelector('option[value="@delete"]').disabled = !names.length;
+}
+function saveAsTemplate() {
+  const name = (prompt("テンプレートの名前") || "").trim();
+  if (!name) return;
+  if (BUILTIN_NAMES.includes(name)) { alert(`「${name}」は組み込みのテンプレートと同じ名前なので使えません。`); return; }
+  const t = loadUserTpl();
+  if (name in t && !confirm(`「${name}」はすでにあります。上書きしますか？`)) return;
+  t[name] = src.value;
+  if (storeUserTpl(t)) { refreshTplMenu(); flash(`テンプレート「${name}」を保存しました`); }
+}
+function openDeleteDialog() {
+  const t = loadUserTpl(), list = $("tplList");
+  list.replaceChildren(...Object.keys(t).map(n => {
+    const li = document.createElement("li"), b = document.createElement("button");
+    li.append(Object.assign(document.createElement("span"), { textContent: n }), b);
+    b.textContent = "削除";
+    b.onclick = () => {
+      if (!confirm(`テンプレート「${n}」を削除しますか？元に戻せません。`)) return;
+      const cur = loadUserTpl(); delete cur[n];
+      if (storeUserTpl(cur)) { li.remove(); refreshTplMenu(); $("tplEmpty").hidden = list.children.length > 0; }
+    };
+    return li;
+  }));
+  $("tplEmpty").hidden = list.children.length > 0;
+  $("tplDlg").showModal();
+}
+$("preset").addEventListener("change", e => {
+  const v = e.target.value; e.target.value = "";
+  if (!v) return;
+  if (v === "@save") return saveAsTemplate();
+  if (v === "@delete") return openDeleteDialog();
+  const text = v.startsWith("u:") ? loadUserTpl()[v.slice(2)] : PRESETS[v];
+  if (text === undefined) return;
+  if (isDirty() && !confirm("保存していない変更があります。破棄してテンプレートを読み込みますか？")) return;
+  src.value = text; markSaved(); render();
+});
+refreshTplMenu();
+
+preview.addEventListener("mousemove", e => {
+  const svg = preview.querySelector("svg"); if (!svg || !current) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse()), g = current.L.grid;
+  $("coord").textContent = `x=${((p.x - g.ox) / g.slotW).toFixed(2)}, y=${(p.y / g.rowH).toFixed(2)}`;
+});
+
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+const baseName = () => "pipeline";
+
+function svgString() { return toSVG(current.L); }
+async function pngBlob(scale = 3) {
+  const { B } = current.L;
+  const url = URL.createObjectURL(new Blob([svgString()], { type: "image/svg+xml" }));
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error("SVG の画像化に失敗しました")); img.src = url; });
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(B.w * scale); c.height = Math.ceil(B.h * scale);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return await new Promise(res => c.toBlob(res, "image/png"));
+  } finally { URL.revokeObjectURL(url); }
+}
+
+// ---- help tour: highlight each part of the screen in turn and explain what it does / where results appear
+const TOUR = [
+  { sel: "#preset", title: "テンプレート", text: `図のひな形を選ぶメニューです。<ul>
+    <li><b>組み込み</b>：最初から入っているサンプル（削除できません）</li>
+    <li><b>マイテンプレート</b>：自分で保存したもの</li>
+    <li><b>＋ 今の内容をテンプレートとして保存…</b>：左の入力欄の内容に名前を付けて追加</li>
+    <li><b>マイテンプレートを削除…</b>：保存したものを一覧から削除</li></ul>
+    選ぶと左の入力欄が置き換わります。テンプレートはこのブラウザの中に保存されます。` },
+  { sel: "#open", title: "入力テキストを開く", text: "保存しておいた <code>.txt</code> を選ぶと、左の入力欄に読み込んで図を描き直します。保存していない変更があるときは確認が出ます。" },
+  { sel: "#save", title: "入力テキストを保存", text: "左の入力欄の内容を <code>.txt</code> で保存します。Chrome / Edge では保存場所とファイル名を選べます。後で「入力テキストを開く」で続きから編集できます。<br>保存していない変更があると、タブ名に「●」が付き、閉じるときに確認が出ます。" },
+  { sel: "#zoom", up: 1, title: "拡大", text: "右のプレビューの表示倍率です。「全体」は図全体が収まる大きさにします。書き出す図の大きさには影響しません。" },
+  { sel: "#slotWR", up: 1, title: "幅", text: "ステージ（円柱）1つの横幅です。スライダーか数値で変えると図にすぐ反映され、入力欄の <code>set</code> 行の <code>slotW=</code> も書き換わります。" },
+  { sel: "#rowHR", up: 1, title: "高さ", text: "1行の高さです。入力欄の <code>set</code> 行の <code>rowH=</code> が書き換わります。" },
+  { sel: "#sizeReset", title: "既定に戻す", text: "幅と高さを既定値（95 / 30.5）に戻します。入力欄の <code>set</code> 行から <code>slotW</code> / <code>rowH</code> を消します。" },
+  { sel: "#exBtn", title: "図を書き出し", text: `完成した図をファイルにします。<ul>
+    <li><b>PPTX で保存</b>：PowerPoint で図形として編集できる形（インターネット接続が必要）</li>
+    <li><b>PNG で保存</b> / <b>SVG で保存</b>：画像として保存</li>
+    <li><b>PNG をクリップボードにコピー</b>：そのまま貼り付けられます</li></ul>
+    ファイルはブラウザのダウンロードフォルダに保存されます。` },
+  { sel: "#src", title: "入力欄", text: "ここに命令列や注釈をテキストで書きます。書き換えると右の図がすぐ描き直されます。<br>内容はブラウザに自動保存され、開き直すと戻ります。書き方は下の「記法リファレンス」を見てください。" },
+  { sel: "#errors", fallback: "#src", title: "エラー表示", text: "書き方に間違いがあると、入力欄の下に赤い欄が出て、何行目の何が問題かを表示します。間違えた部分は既定の見た目で描かれ、ほかの部分はそのまま表示されます。" },
+  { sel: "details > summary", title: "記法リファレンス", text: "クリックすると、命令行・色・注釈・<code>set</code> のキーなど、入力欄の書き方の一覧が開きます。" },
+  { sel: "#stage", title: "プレビュー", text: "入力欄の内容から描いた図です。書き出すとこの見た目のままファイルになります。" },
+  { sel: "#coord", title: "座標", text: "プレビューの上でマウスを動かすと、その位置の座標（x = スロット、y = 行）が出ます。<code>text</code> や <code>arrow</code> の位置を決めるときに使います。" },
+  { sel: "#info", title: "図の情報・お知らせ", text: "行数と図の大きさ（px）を表示します。保存やコピーをしたときは、ここに数秒お知らせが出ます。" },
+  { sel: "#helpBtn", title: "使い方", text: "この説明をもう一度見たいときは、このボタンを押してください。<br>操作：<b>→ / Enter</b> 次へ、<b>←</b> 戻る、<b>Esc</b> 閉じる" },
+];
+{
+  let idx = 0;
+  const tour = $("tour"), hole = $("tourHole"), pop = $("tourPop");
+  const visible = el => el && el.getClientRects().length > 0 && el.getBoundingClientRect().width > 0;
+  const targetOf = st => {
+    let el = document.querySelector(st.sel);
+    if (!visible(el) && st.fallback) el = document.querySelector(st.fallback);
+    if (el && st.up) el = el.parentElement; // highlight the whole label (slider + number box)
+    return el;
+  };
+  function place() {
+    const st = TOUR[idx], el = targetOf(st);
+    el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const r = el.getBoundingClientRect(), m = 4, W = innerWidth, H = innerHeight;
+    Object.assign(hole.style, { left: r.left - m + "px", top: r.top - m + "px", width: r.width + 2 * m + "px", height: r.height + 2 * m + "px" });
+    const pw = pop.offsetWidth, ph = pop.offsetHeight, gap = 12;
+    let top;
+    if (r.bottom + gap + ph < H - 8) top = r.bottom + gap;            // below
+    else if (r.top - gap - ph > 8) top = r.top - gap - ph;            // above
+    else top = Math.min(Math.max(r.top + 16, 8), H - ph - 8);          // large target: inside it
+    const left = Math.min(Math.max(r.left, 8), W - pw - 8);
+    Object.assign(pop.style, { top: top + "px", left: left + "px" });
+  }
+  function show(i) {
+    idx = Math.max(0, Math.min(TOUR.length - 1, i));
+    const st = TOUR[idx];
+    $("tourStep").textContent = `${idx + 1} / ${TOUR.length}`;
+    $("tourTitle").textContent = st.title;
+    $("tourText").innerHTML = st.text;
+    $("tourPrev").disabled = idx === 0;
+    $("tourNext").textContent = idx === TOUR.length - 1 ? "終わる" : "次へ →";
+    tour.hidden = false;
+    place();
+    $("tourNext").focus();
+  }
+  const close = () => { tour.hidden = true; $("helpBtn").focus(); };
+  $("helpBtn").onclick = () => show(0);
+  $("tourPrev").onclick = () => show(idx - 1);
+  $("tourNext").onclick = () => idx === TOUR.length - 1 ? close() : show(idx + 1);
+  $("tourClose").onclick = close;
+  document.addEventListener("keydown", e => {
+    if (tour.hidden) return;
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); $("tourNext").click(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); show(idx - 1); }
+  });
+  window.addEventListener("resize", () => { if (!tour.hidden) place(); });
+}
+
+// export menu: open/close on the button, close after choosing, on outside click, or with Esc
+{
+  const btn = $("exBtn"), list = $("exMenu").querySelector(".menu-list");
+  const setOpen = open => {
+    list.hidden = !open; btn.setAttribute("aria-expanded", open);
+    if (!open) return;
+    // open toward whichever side keeps the menu on screen (the header may wrap and put the button on the left)
+    list.style.left = "auto"; list.style.right = "0";
+    const r = list.getBoundingClientRect();
+    if (r.left < 8) { list.style.right = "auto"; list.style.left = "0"; }
+  };
+  btn.onclick = () => { setOpen(list.hidden); if (!list.hidden) list.querySelector("button").focus(); };
+  list.addEventListener("click", e => { if (e.target.closest("button")) setOpen(false); });
+  document.addEventListener("click", e => { if (!$("exMenu").contains(e.target)) setOpen(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !list.hidden) { setOpen(false); btn.focus(); } });
+}
+$("exSvg").onclick =() => download(new Blob([svgString()], { type: "image/svg+xml" }), baseName() + ".svg");
+$("exPng").onclick = async () => { try { download(await pngBlob(), baseName() + ".png"); } catch (e) { alert(e.message); } };
+$("cpPng").onclick = async () => {
+  try { await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob() })]); flash("PNG をクリップボードにコピーしました"); }
+  catch (e) { alert("コピーできませんでした: " + e.message); }
+};
+$("exPptx").onclick = async () => {
+  try { download(await toPPTX(current.L, current.D.set), baseName() + ".pptx"); }
+  catch (e) { alert(e.message); console.error(e); }
+};
+// source save: "Save as" dialog (Chrome / Edge) so the user picks name and folder; otherwise ask for a name and download
+let srcName = "pipeline.txt";
+$("save").onclick = async () => {
+  const text = src.value, blob = new Blob([text], { type: "text/plain" });
+  if (window.showSaveFilePicker) {
+    try {
+      const h = await showSaveFilePicker({ suggestedName: srcName,
+        types: [{ description: "Pipeline Drawer の入力テキスト", accept: { "text/plain": [".txt"] } }] });
+      const w = await h.createWritable(); await w.write(blob); await w.close();
+      srcName = h.name; markSaved(text); flash(`${h.name} に保存しました`);
+    } catch (e) { if (e.name !== "AbortError") alert("保存できませんでした: " + e.message); }
+    return;
+  }
+  const name = prompt("保存するファイル名（保存先はブラウザのダウンロード設定に従います）", srcName);
+  if (!name || !name.trim()) return;
+  srcName = /\.txt$/i.test(name.trim()) ? name.trim() : name.trim() + ".txt";
+  download(blob, srcName);
+  markSaved(text);
+};
+$("open").onclick = () => {
+  if (isDirty() && !confirm("保存していない変更があります。破棄して別のファイルを開きますか？")) return;
+  $("file").click();
+};
+$("file").onchange = async e => { const fl = e.target.files[0]; if (fl) { src.value = await fl.text(); srcName = fl.name; markSaved(); render(); } e.target.value = ""; };
+
+function flash(msg) { const el = $("info"), old = el.textContent; el.textContent = msg; setTimeout(() => el.textContent = old, 2000); }
+
+let saved = null;
+try { saved = localStorage.getItem(LS_KEY); } catch (e) { /* ignore */ }
+const hashPreset = location.hash.slice(1);
+src.value = PRESETS[hashPreset] || saved || PRESETS.five;
+try { savedText = localStorage.getItem(LS_SAVED); } catch (e) { /* ignore */ }
+if (PRESETS[hashPreset] || savedText === null) markSaved(); // first visit or sample link: nothing unsaved yet
+render();
+</script>
+</body>
+</html>
