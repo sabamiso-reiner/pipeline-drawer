@@ -64,6 +64,28 @@
       linear-gradient(-45deg, transparent 75%, #eef0f3 75%) -8px 0/16px 16px, #fff; }
   #preview svg { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.15); display: block; }
   #status { padding: 4px 12px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); background: var(--panel); display: flex; gap: 16px; }
+  #ac { position: fixed; z-index: 50; min-width: 240px; max-width: min(460px, calc(100vw - 8px)); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.18); font: 12.5px/1.45 Consolas, "BIZ UDGothic", "MS Gothic", monospace; padding: 3px; }
+  #ac[hidden] { display: none; }
+  #acList { max-height: 220px; overflow: auto; }
+  .ac-item { display: flex; align-items: center; gap: 7px; padding: 2px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+  .ac-item:hover { background: #f1f3f5; }
+  .ac-item.sel { background: #d9f0e3; }
+  .ac-sw { width: 12px; height: 12px; flex: none; border: 1px solid #8a8f99; border-radius: 2px; }
+  .ac-sw.none { visibility: hidden; }
+  .ac-kind { color: var(--muted); font-size: 10.5px; font-family: "Segoe UI", Meiryo, sans-serif; }
+  .ac-desc { margin-left: auto; padding-left: 14px; color: var(--muted); font-family: "Segoe UI", Meiryo, sans-serif; overflow: hidden; text-overflow: ellipsis; }
+  .ac-foot { border-top: 1px solid #eee; margin-top: 3px; padding: 3px 8px 1px; color: var(--muted); font-size: 11px; white-space: normal; }
+  .ac-foot code { color: var(--text); }
+  #qfBulb { position: fixed; z-index: 40; padding: 0 8px; border: 1px solid #e0b400; border-radius: 10px; background: #fff8d6; color: #6b5200; font: 11.5px/1.6 "Segoe UI", Meiryo, sans-serif; cursor: pointer; white-space: nowrap; }
+  #qfBulb:hover { border-color: #b38f00; background: #fff1b3; }
+  #qfBulb[hidden], #qf[hidden] { display: none; }
+  #qf { position: fixed; z-index: 50; width: min(600px, calc(100vw - 8px)); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.18); padding: 3px; font: 12.5px/1.5 "Segoe UI", Meiryo, sans-serif; }
+  #qf .qf-head { padding: 2px 8px 3px; color: var(--muted); font-size: 11.5px; }
+  #qf .qf-ignore { color: var(--muted); }
+  #qfPrev { margin-top: 3px; border-top: 1px solid #eee; padding: 4px 6px 2px; max-height: 220px; overflow: auto; font: 12px/1.45 Consolas, "BIZ UDGothic", "MS Gothic", monospace; white-space: pre; color: var(--muted); }
+  #qfPrev .why { white-space: pre-line; color: var(--text); font: 12px/1.5 "Segoe UI", Meiryo, sans-serif; margin-bottom: 4px; }
+  #qfPrev .del { background: #fdecec; color: #a12020; }
+  #qfPrev .add { background: #e6f6ec; color: #136c35; }
   @media (max-width: 800px) { main { grid-template-columns: 1fr; grid-template-rows: 50% 50%; } }
 </style>
 <script defer src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
@@ -117,6 +139,7 @@
       <summary>記法リファレンス</summary>
       <div id="help">
         <p>座標は <b>x = スロット（サイクル）</b>、<b>y = 行</b>。行 k（1始まり）は y = k−1 〜 k の範囲。小数OK。プレビュー上でマウスを動かすと座標が下に出ます。</p>
+        <p><b>入力予測</b>：入力中に候補が出ます（コマンド名、<code>set</code> のキー、定義済みの種類・スタイル、使用中のステージ名や色など）。<b>Tab / Enter</b> で決定、<b>↑↓</b> で選択、<b>Esc</b> で閉じる、<b>Ctrl+Space</b> でいつでも表示。命令行のすぐ下で改行すると、前の行の続き（番号 +1・開始位置を 1 つ後ろ）が出るので <b>Tab</b> で挿入できます。命令行を途中に追加・削除すると <b>💡</b> が出るので、<b>Ctrl+.</b> で番号・開始位置（元の間隔を保つ分）・注釈・縦線・凡例・「|」の位置をまとめて直せます。<code>text</code> などのひな形を入れたら <b>Tab</b> で次の欄へ移ります。</p>
         <p><b>命令行</b>：<code>ラベル | 種類 | ステージ列</code>（種類は省略可）</p>
         <pre>1 lw r1, 0(r2) | load   | IF ID EX MEM WB
 2 （誤った経路） | wrong  | @1 IF ID {flush}
@@ -154,6 +177,9 @@
     <div id="status"><span id="coord">x=–, y=–</span><span id="info"></span></div>
   </section>
 </main>
+<button id="qfBulb" hidden title="命令行を途中に追加・削除したので、ほかの行の修正を提案します（Ctrl+.）">💡 修正の提案 Ctrl+.</button>
+<div id="qf" hidden><div class="qf-head" id="qfHead"></div><div id="qfList" role="listbox"></div><div id="qfPrev"></div></div>
+<div id="ac" hidden><div id="acList" role="listbox"></div><div class="ac-foot" id="acFoot"></div></div>
 <div id="tour" hidden>
   <div id="tourHole"></div>
   <div id="tourPop" role="dialog" aria-live="polite">
@@ -707,6 +733,7 @@ function render() {
   $("info").textContent = `${D.rows.length} 行 / ${Math.round(L.B.w)}×${Math.round(L.B.h)} px`;
   try { localStorage.setItem(LS_KEY, src.value); } catch (e) { /* storage unavailable */ }
   updateDirty();
+  qfCheck();
 }
 
 // ---- size controls (slotW / rowH) <-> "set" line in the source
@@ -765,9 +792,968 @@ for (const k of SIZE_KEYS) for (const sfx of ["R", "N"]) {
 
 let timer = 0;
 src.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(render, 120); });
-src.addEventListener("keydown", e => {
-  if (e.key === "Tab") { e.preventDefault(); const s = src.selectionStart; src.setRangeText("    ", s, src.selectionEnd, "end"); render(); }
+// ============================================================ autocomplete (入力予測)
+// Suggestions depend on where the caret is: command names at the start of a line, keys / values on
+// definition lines, type names / stage names / {style} names on instruction rows.
+// Tab or Enter accepts, Esc closes, Ctrl+Space opens it by hand. Inserted snippets (e.g. text x y "文字")
+// select their first field; Tab moves to the next field.
+const AC_CMDS = [
+  { label: "type",    insert: 'type ${名前} fill=${#ffffff} legend="${凡例}"', desc: "左ラベル列の種類を定義", sig: 'type 名前 fill=#色 text=#色 legend="凡例"' },
+  { label: "style",   insert: 'style ${名前} fill=${#404040} legend="${凡例}"', desc: "ステージ（円柱）の見た目を定義", sig: 'style 名前 fill=#色 text=#色 stroke=#色 legend="凡例"' },
+  { label: "set",     insert: "set ", desc: "寸法・フォントなど", sig: "set キー=値 キー=値 …", reopen: true },
+  { label: "vline",   insert: "vline ${x}", desc: "縦の破線", sig: 'vline x … top="文字" bottom="文字" color=#色 size=数' },
+  { label: "text",    insert: 'text ${x} ${y} "${文字}"', desc: "注釈テキスト", sig: 'text x y "文字" color=#色 size=数 align=left|center|right border=#色 fill=#色 bold' },
+  { label: "arrow",   insert: "arrow ${x1},${y1} -> ${x2},${y2}", desc: "折れ線矢印", sig: "arrow x,y -> x,y … color=#色 width=数 heads=end|start|both|none dash" },
+  { label: "brace",   insert: 'brace ${y1} ${y2} ${x} "${ラベル}"', desc: "右側の括弧＋ラベル", sig: 'brace y1 y2 x "ラベル" color=#色 size=数' },
+  { label: "legend",  insert: "legend ${x} ${y}", desc: "凡例の位置（左上）", sig: "legend x y ／ legend off" },
+  { label: "legend off", insert: "legend off", desc: "凡例を非表示" },
+  { label: "caption", insert: 'caption "${図の説明}"', desc: "図の下のキャプション", sig: 'caption "文字" size=数 color=#色' },
+  { label: "命令行",  match: "", insert: "${ラベル} | ${normal} | ${IF ID EX MEM WB}", desc: "ラベル | 種類 | ステージ列" },
+];
+const AC_SET_DESC = {
+  slotW: "ステージ1つの横幅", rowH: "1行の高さ", labelW: "命令名の枠の最小幅", labelGap: "命令名の枠とステージの間隔",
+  fontSize: "命令名の文字サイズ", stageFontSize: "ステージの文字サイズ", legendSize: "凡例の文字サイズ", legendGap: "凡例の行間（倍率）",
+  font: "命令名・凡例のフォント", stageFont: "ステージのフォント", cylH: "円柱の高さの割合", cap: "円柱の端の楕円の割合",
+  stroke: "線の色", strokeW: "線の太さ", rowBorder: "命令名の枠線の色", rowBorderW: "命令名の枠線の太さ",
+  axis: "時間軸のラベル", labels: "命令名の列", slots: "横のスロット数（0=自動）", pad: "図の周りの余白",
+  pptx: "PPTX のスライド比", pptxX: "PPTX 上の図の x（インチ）", pptxY: "PPTX 上の図の y（インチ）", pptxW: "PPTX 上の図の幅（インチ）",
+};
+const AC_KEYS = {
+  type:    { fill: "塗りの色", text: "文字の色", legend: "凡例の文字" },
+  style:   { fill: "塗りの色", text: "文字の色", stroke: "線の色", legend: "凡例の文字" },
+  vline:   { top: "線の上の文字", bottom: "線の下の文字", color: "線と文字の色", size: "文字の大きさ" },
+  text:    { color: "文字の色", size: "文字の大きさ", align: "揃え", border: "枠線の色", fill: "背景の色" },
+  arrow:   { color: "線の色", width: "線の太さ", heads: "矢じりの位置" },
+  brace:   { color: "色", size: "文字の大きさ" },
+  caption: { size: "文字の大きさ", color: "文字の色" },
+};
+const AC_FLAGS = { text: { bold: "太字" }, arrow: { dash: "破線" } };
+const AC_QUOTED = new Set(["legend", "top", "bottom"]);
+const AC_ENUM = {
+  align: ["left", "center", "right"], heads: ["end", "start", "both", "none"], axis: ["cycle", "none"], labels: ["on", "off"],
+  pptx: ["4:3", "16:9"], font: ["メイリオ", "游ゴシック", "BIZ UDPゴシック", "MS ゴシック", "Arial"],
+  stageFont: ["Times New Roman", "Century", "Arial", "メイリオ"],
+};
+const AC_COLOR_KEYS = new Set(["fill", "text", "stroke", "color", "border", "rowBorder"]);
+const AC_PALETTE = ["#000000", "#ffffff", "#d9d9d9", "#404040", "#c00000", "#e46c0a", "#0070c0", "#4472c4", "#dbe5f1", "#fde9d9", "#d7e4bd"];
+const AC_WORD = /[^\s|{}"=*]*$/;   // the word being typed ends at one of these separators
+
+// names and colors already used in the input (the word being typed is cut out beforehand)
+function acCollect(text) {
+  const D = parse(text);
+  const styleNames = new Set(["stage", "flush", "bubble", "hl"]);
+  for (const m of text.matchAll(/^[ \t]*style[ \t]+(\S+)/gm)) styleNames.add(m[1]);
+  const stages = new Set(["IF", "ID", "EX", "MEM", "WB"]);
+  const typos = new Set(qfStageIssues(text).map(is => is.key.split(":")[1]));   // misspelled names are not offered
+  const colors = new Map();
+  for (const raw of text.split(/\r?\n/)) {
+    const line = stripComment(raw).trim();
+    for (const m of line.matchAll(/#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?![0-9a-zA-Z])/g)) {
+      const c = m[0].toLowerCase(); colors.set(c, (colors.get(c) || 0) + 1);
+    }
+    if (!line.includes("|") || /^(text|caption|brace)\b/.test(line)) continue;
+    const parts = line.split("|");
+    for (const tok of parts[parts.length - 1].split(/\s+/)) {
+      const m = tok.match(/^([^{}*@\s]+)/);
+      if (m && !/^(-|_|\.+|…|・+)$/.test(m[1]) && !typos.has(m[1])) stages.add(m[1]);
+    }
+  }
+  return {
+    D, stages: [...stages],
+    styleNames: [...styleNames].filter(n => D.styles[n]),
+    colors: [...colors.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]),
+  };
+}
+
+function acColorItems(C, close = "") {
+  const used = new Set(C.colors);
+  return [...new Set([...C.colors, ...AC_PALETTE])].map(c =>
+    ({ label: c, insert: c + close, swatch: c, kind: "色", desc: used.has(c) ? "入力中で使用" : "" }));
+}
+
+// suggestion for a new instruction row right below another one (comment lines in between are skipped):
+// label number +1, same type, same stages started one slot later ("5 … | normal | @4 IF ID" -> "6 … | normal | @5 IF ID")
+function acNextRow(v, ls) {
+  let end = ls - 1, prev = null;
+  while (end > 0) {
+    const start = v.lastIndexOf("\n", end - 1) + 1, raw = v.slice(start, end);
+    if (/^\s*(#|\/\/)/.test(raw)) { end = start - 1; continue; }
+    prev = stripComment(raw).trim();
+    break;
+  }
+  if (!prev || !prev.includes("|") || /^(text|caption|brace)\b/.test(prev)) return null;
+  const parts = prev.split("|").map(s => s.trim());
+  if (parts.length !== 2 && parts.length !== 3) return null;
+  const toks = parts[parts.length - 1].split(/\s+/).filter(Boolean);
+  const at = toks[0] && toks[0].match(/^@(-?[\d.]+)$/);
+  if (at) toks.shift();
+  // start: continue the issue pattern of the rows above (2 per cycle: @1 @1 -> @2), else one cycle after the previous row
+  const above = qfRows(v.slice(0, ls)).map(r => qfInfo(r.code).start), pat = qfPattern(above);
+  const startNext = pat ? Math.floor(above.length / pat.w) + pat.c : (at ? Number(at[1]) : 0) + 1;
+  if (Math.abs(startNext) > 1e-9) toks.unshift("@" + Number(startNext.toFixed(6)));
+  const num = parts[0].match(/^(\d+)/), n = num ? Number(num[1]) + 1 : null;
+  const label = num ? `${n} \${命令}` : "${ラベル}";
+  const stages = toks.join(" ").replace(/\$\{/g, "$ {");   // plain text: stage tokens may contain "}"
+  const insert = parts.length === 3 ? `${label} | \${${parts[1] || "normal"}} | ${stages}` : `${label} | ${stages}`;
+  const below = qfRows(v.slice(ls)).map(r => qfInfo(r.code).num).find(x => x !== null);
+  return { next: true, top: true, snippet: true, insert, match: num ? String(n) : "",
+    label: insert.replace(/\$\{([^}]*)\}/g, "$1"), kind: "次の命令行",
+    desc: below === n && n !== null ? "後ろの番号は 💡 Ctrl+. で振り直し" : "前の行の続き" };
+}
+
+// what can be completed at the caret: { from, to, prefix, items, autoEmpty, sig } or null
+function acContext() {
+  const v = src.value, caret = src.selectionStart;
+  if (caret !== src.selectionEnd) return null;
+  const ls = v.lastIndexOf("\n", caret - 1) + 1;
+  let le = v.indexOf("\n", caret); if (le < 0) le = v.length;
+  const line = v.slice(ls, le), before = v.slice(ls, caret), after = v.slice(caret, le);
+  if (stripComment(before) !== before) return null;                                   // in a comment
+  if ([...before].filter((ch, i) => ch === '"' && before[i - 1] !== "\\").length % 2) return null; // in "..."
+  const word = before.match(AC_WORD)[0];
+  const from = caret - word.length, to = caret + after.match(/^[^\s|{}"=*]*/)[0].length;
+  const nextCh = v[to] || "", rest = v.slice(to, le);
+  const beforeWord = before.slice(0, before.length - word.length), ch = beforeWord.slice(-1);
+  const C = acCollect(v.slice(0, from) + v.slice(to));
+  const ctx = (items, autoEmpty, sig) => ({ from, to, prefix: word, items, autoEmpty, sig });
+  const typeItems = (suffix = "") => Object.keys(C.D.types).map(n =>
+    ({ label: n, insert: n + suffix, kind: "種類", swatch: C.D.types[n].fill, desc: C.D.types[n].legend || "" }));
+
+  // ---- instruction row: ラベル | 種類 | ステージ列
+  if (line.includes("|") && !/^\s*(text|caption|brace)\b/.test(line)) {
+    const seg = (before.match(/\|/g) || []).length, nSeg = (line.match(/\|/g) || []).length + 1;
+    if (seg === 0) return null;                                      // free-form label
+    if (nSeg === 3 && seg === 1) return ctx(typeItems(), true);
+    if (seg !== nSeg - 1) return null;
+    if (ch === "{") {                                                // EX{… → style name or color
+      const close = nextCh === "}" ? "" : "}";
+      return ctx([...C.styleNames.map(n => ({ label: n, insert: n + close, kind: "スタイル",
+        swatch: C.D.styles[n].fill, desc: C.D.styles[n].legend || "" })), ...acColorItems(C, close)], true);
+    }
+    if (ch && !/[\s|]/.test(ch)) return null;                        // after "}" or "*"
+    if (word.startsWith("@")) return null;
+    const items = C.stages.map(n => ({ label: n, insert: n, kind: "ステージ" }));
+    items.push(...C.styleNames.map(n => ({ label: `{${n}}`, match: n, insert: `{${n}}`, kind: "円柱",
+      swatch: C.D.styles[n].fill, desc: "ラベル無しの円柱" })));
+    // "1 add | n…" with only one "|" so far: the user may be writing the type
+    const segText = before.slice(before.lastIndexOf("|") + 1);
+    if (nSeg === 2 && segText.trimStart().length === word.length) items.push(...typeItems(" | "));
+    return ctx(items, false);
+  }
+
+  // ---- first word of the line: command, or the row that follows the instruction row above
+  if (!beforeWord.trim()) {
+    const tail = rest.trim() !== "";                                 // editing a command in an existing line
+    const next = tail ? null : acNextRow(v, ls);
+    if (/^\d+$/.test(word)) return next ? ctx([next], false) : null; // "6…": the label number of the next row
+    if (!/^[A-Za-z]*$/.test(word)) return null;
+    return ctx([...(next ? [next] : []), ...AC_CMDS.filter(c => !tail || c.match !== "").map(c =>
+      ({ ...c, kind: "コマンド", insert: tail ? c.label : c.insert, snippet: !tail }))], false);
+  }
+
+  // ---- arguments of a command
+  const toks = beforeWord.trim().split(/\s+/), cmd = toks[0].toLowerCase(), argc = toks.length - 1;
+  const sig = (AC_CMDS.find(c => c.label === cmd) || {}).sig;
+  if (ch === "=") {                                                  // key=… → value
+    const key = (beforeWord.match(/([A-Za-z_][\w.-]*)=$/) || [])[1];
+    if (!key) return null;
+    if (AC_COLOR_KEYS.has(key)) return ctx(acColorItems(C), true, sig);
+    if (AC_ENUM[key]) return ctx(AC_ENUM[key].map(x => ({ label: x, insert: /\s/.test(x) ? `"${x}"` : x, kind: "値" })), true, sig);
+    return null;
+  }
+  if (ch && !/\s/.test(ch)) return null;
+  if ((cmd === "type" || cmd === "style") && argc === 0) {           // name being defined: existing ones
+    const names = cmd === "type" ? Object.keys(C.D.types) : C.styleNames;
+    const defs = cmd === "type" ? C.D.types : C.D.styles;
+    return ctx(names.map(n => ({ label: n, insert: n, kind: "名前", swatch: defs[n].fill, desc: "定義済み（上書き）" })), false, sig);
+  }
+  if (cmd === "legend" && argc === 0) return ctx([{ label: "off", insert: "off", kind: "指定", desc: "凡例を非表示" }], false, sig);
+  const keys = cmd === "set" ? Object.keys(DEFAULTS) : Object.keys(AC_KEYS[cmd] || {});
+  const present = new Set([...line.matchAll(/([A-Za-z_][\w.-]*)=/g)].map(m => m[1]));
+  const items = keys.filter(k => !present.has(k)).map(k => {
+    const hasEq = nextCh === "=", quoted = AC_QUOTED.has(k);
+    const desc = cmd === "set" ? `${AC_SET_DESC[k] || ""}（既定 ${DEFAULTS[k] ?? "自動"}）` : AC_KEYS[cmd][k];
+    return { label: k + "=", match: k, kind: "キー", desc, snippet: quoted && !hasEq,
+      insert: hasEq ? k : quoted ? `${k}="\${}"` : `${k}=`,
+      reopen: !hasEq && (AC_COLOR_KEYS.has(k) || !!AC_ENUM[k]) };
+  });
+  for (const [f, d] of Object.entries(AC_FLAGS[cmd] || {})) if (!toks.includes(f)) items.push({ label: f, insert: f, kind: "指定", desc: d });
+  if (!items.length) return null;
+  return ctx(items, cmd === "set" || ((cmd === "type" || cmd === "style") && argc >= 1), sig);
+}
+
+// prefix matches first (exact match on top), then substring matches for 2+ typed characters
+function acFilter(items, prefix) {
+  const p = prefix.toLowerCase(), seen = new Set(), out = [];
+  for (const it of items) {
+    if (seen.has(it.label)) continue;
+    seen.add(it.label);
+    const key = (it.match ?? it.label).toLowerCase();
+    if (key === "") { if (!p) out.push([it.top ? -1 : 3, it]); }
+    else if (key === p) out.push([it.top ? -1 : 0, it]);
+    else if (key.startsWith(p)) out.push([it.top ? -1 : 1, it]);
+    else if (p.length >= 2 && key.includes(p)) out.push([2, it]);
+  }
+  return out.sort((a, b) => a[0] - b[0]).map(x => x[1]).slice(0, 80);
+}
+
+const acBox = $("ac"), acList = $("acList"), acFoot = $("acFoot");
+const ac = { open: false, items: [], sel: 0, ctx: null };
+let acBusy = false, snip = null;   // snip: { stops: [[start, end], ...], i, len } while filling a snippet
+
+function acClose() { ac.open = false; acBox.hidden = true; }
+// nextOnly: opened by a line break, offering only the next instruction row. Enter then still makes a
+// new line (so blank lines can be typed as before) and Tab inserts the row.
+function acUpdate(force, nextOnly) {
+  const ctx = acContext();
+  if (!ctx) return acClose();
+  if (nextOnly) {
+    const it = ctx.items.find(i => i.next);
+    if (!it || ctx.prefix) return acClose();
+    ctx.items = [it];
+  } else if (!force && !ctx.prefix && !ctx.autoEmpty) return acClose();
+  const items = acFilter(ctx.items, ctx.prefix);
+  if (!items.length || (!force && items.length === 1 && items[0].insert === ctx.prefix)) return acClose();
+  Object.assign(ac, { open: true, items, sel: 0, ctx, enterOk: !nextOnly });
+  acDraw();
+  acPlace();
+}
+function acDraw() {
+  acList.replaceChildren(...ac.items.map((it, i) => {
+    const row = document.createElement("div");
+    row.className = "ac-item" + (i === ac.sel ? " sel" : "");
+    row.setAttribute("role", "option");
+    row.dataset.i = i;
+    const sw = document.createElement("span");
+    sw.className = "ac-sw" + (it.swatch ? "" : " none");
+    if (it.swatch) sw.style.background = it.swatch;
+    const lab = document.createElement("span"); lab.textContent = it.label;
+    const kind = document.createElement("span"); kind.className = "ac-kind"; kind.textContent = it.kind || "";
+    const desc = document.createElement("span"); desc.className = "ac-desc"; desc.textContent = it.desc || "";
+    row.append(sw, lab, kind, desc);
+    return row;
+  }));
+  acFoot.textContent = "";
+  if (ac.ctx.sig) { const c = document.createElement("code"); c.textContent = ac.ctx.sig; acFoot.append(c, document.createElement("br")); }
+  acFoot.append(ac.enterOk ? "Tab / Enter 決定・↑↓ 選択・Esc 閉じる・Ctrl+Space 候補を表示"
+    : "Tab で挿入・Enter で普通に改行・Esc 閉じる");
+  acList.children[ac.sel]?.scrollIntoView({ block: "nearest" });
+}
+// screen position of a character in the textarea, measured with an invisible copy of its text
+function caretXY(pos) {
+  const cs = getComputedStyle(src), m = document.createElement("div");
+  for (const p of ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "tabSize",
+    "paddingTop", "paddingLeft", "borderTopWidth", "borderLeftWidth"]) m.style[p] = cs[p];
+  Object.assign(m.style, { position: "absolute", visibility: "hidden", top: "0", left: "-9999px", whiteSpace: "pre", borderStyle: "solid", borderColor: "transparent" });
+  m.textContent = src.value.slice(0, pos);
+  const sp = document.createElement("span"); sp.textContent = "​"; m.appendChild(sp);
+  document.body.appendChild(m);
+  const x = sp.offsetLeft, y = sp.offsetTop, h = sp.offsetHeight;
+  m.remove();
+  const r = src.getBoundingClientRect();
+  return { x: r.left + x - src.scrollLeft, y: r.top + y - src.scrollTop, h };
+}
+function acPlace() {
+  const p = caretXY(ac.ctx.from);
+  acBox.hidden = false;
+  const w = acBox.offsetWidth, h = acBox.offsetHeight;
+  let top = p.y + p.h + 2;
+  if (top + h > innerHeight - 4 && p.y - h - 2 > 4) top = p.y - h - 2;
+  acBox.style.top = top + "px";
+  acBox.style.left = Math.max(4, Math.min(p.x - 4, innerWidth - w - 4)) + "px";
+}
+function acMove(d) {
+  ac.sel = (ac.sel + d + ac.items.length) % ac.items.length;
+  [...acList.children].forEach((el, i) => el.classList.toggle("sel", i === ac.sel));
+  acList.children[ac.sel].scrollIntoView({ block: "nearest" });
+}
+
+// replace [from, to) keeping the browser's undo history (execCommand), with a plain fallback
+function acReplace(from, to, text) {
+  src.focus();
+  src.setSelectionRange(from, to);
+  acBusy = true;
+  try {
+    let ok = false;
+    try { ok = document.execCommand("insertText", false, text); } catch (e) { /* unsupported */ }
+    if (!ok) { src.setRangeText(text, from, to, "end"); src.dispatchEvent(new Event("input")); }
+  } finally { acBusy = false; }
+}
+// insert text; with isSnip, ${field} marks become fields selected one by one with Tab
+function acInsert(from, to, text, isSnip) {
+  let out = text;
+  const stops = [];
+  if (isSnip) {
+    out = ""; let last = 0;
+    for (const m of text.matchAll(/\$\{([^}]*)\}/g)) {
+      out += text.slice(last, m.index);
+      stops.push([out.length, out.length + m[1].length]);
+      out += m[1]; last = m.index + m[0].length;
+    }
+    out += text.slice(last);
+  }
+  acReplace(from, to, out);
+  if (stops.length) {
+    stops.push([out.length, out.length]);   // final stop: just after the snippet
+    snip = { stops: stops.map(([s, e]) => [from + s, from + e]), i: 0, len: src.value.length };
+    src.setSelectionRange(...snip.stops[0]);
+  }
+}
+function acAccept(i) {
+  const it = ac.items[i], { from, to } = ac.ctx;
+  acClose();
+  acInsert(from, to, it.insert, !!it.snippet);
+  if (it.reopen) acUpdate(false);
+}
+// keep snippet fields in place while the current field is edited; leave snippet mode when the caret goes elsewhere
+function snipTrack() {
+  if (!snip) return;
+  const d = src.value.length - snip.len, cur = snip.stops[snip.i];
+  snip.len = src.value.length;
+  cur[1] += d;
+  for (let k = snip.i + 1; k < snip.stops.length; k++) { snip.stops[k][0] += d; snip.stops[k][1] += d; }
+  const c = src.selectionStart;
+  if (c < cur[0] || c > cur[1]) snip = null;
+}
+
+src.addEventListener("input", e => {
+  snipTrack();
+  if (acBusy) return;
+  const t = e.inputType || "";
+  if (e.isComposing || t === "insertCompositionText") return acClose();
+  if (t === "insertText") acUpdate(false);
+  else if (t === "insertLineBreak") acUpdate(false, true);
+  else if (t.startsWith("delete") && ac.open) acUpdate(false);
+  else acClose();
 });
+src.addEventListener("keydown", e => {
+  if (e.isComposing || e.keyCode === 229) return;   // IME is converting: leave Enter etc. alone
+  if (e.code === "Space" && e.ctrlKey && !e.altKey && !e.shiftKey) { e.preventDefault(); acUpdate(true); return; }
+  if (ac.open) {
+    switch (e.key) {
+      case "ArrowDown": e.preventDefault(); acMove(1); return;
+      case "ArrowUp": e.preventDefault(); acMove(-1); return;
+      case "Enter": case "Tab": {
+        if (e.shiftKey || e.ctrlKey || e.altKey) break;
+        // Enter on a word that is already complete makes a new line instead of doing nothing
+        if (e.key === "Enter" && (!ac.enterOk || ac.items[ac.sel].insert === src.value.slice(ac.ctx.from, ac.ctx.to))) { acClose(); return; }
+        e.preventDefault(); acAccept(ac.sel); return;
+      }
+      case "Escape": e.preventDefault(); acClose(); return;
+      case "ArrowLeft": case "ArrowRight": case "Home": case "End": case "PageUp": case "PageDown": acClose(); break;
+    }
+  }
+  if (e.key === "Escape") { snip = null; return; }
+  if (e.key === "Tab" && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    if (snip) {
+      const cur = snip.stops[snip.i];
+      if (src.selectionStart >= cur[0] && src.selectionEnd <= cur[1]) {
+        snip.i = Math.max(0, snip.i + (e.shiftKey ? -1 : 1));
+        src.setSelectionRange(...snip.stops[snip.i]);
+        if (snip.i === snip.stops.length - 1) snip = null;
+        return;
+      }
+      snip = null;
+    }
+    acReplace(src.selectionStart, src.selectionEnd, "    ");
+  }
+});
+src.addEventListener("blur", acClose);
+src.addEventListener("mousedown", () => { acClose(); snip = null; });
+src.addEventListener("scroll", () => { if (ac.open) acPlace(); });
+window.addEventListener("resize", acClose);
+acBox.addEventListener("mousedown", e => e.preventDefault());   // keep the focus in the textarea
+acList.addEventListener("click", e => { const row = e.target.closest(".ac-item"); if (row) acAccept(Number(row.dataset.i)); });
+
+// ============================================================ quick fix (クイックフィックス)
+// When instruction rows are inserted between (or deleted from between) existing rows, a 💡 appears.
+// Ctrl+. (or a click) opens a menu of whole-input fixes with a reason and a diff preview:
+//  - renumber: a 1, 2, 3 … sequence is renumbered as a whole (the inserted row gets its number too)
+//  - timing: the rows below move by the amount that keeps their original spacing to the row above
+//    (inserted row starts @1, the next row was 1 cycle after the row above -> it now starts @2)
+//  - annotations follow the row they sit on: down/up with it, and sideways with its timing change
+//  - "|" columns are realigned when the other rows were aligned
+//  - after a deletion, annotations that sat on the deleted rows can be commented out
+// Detection compares the rows with the rows before the edit (qfBase): same rows plus (or minus)
+// one block of rows somewhere in the middle.
+let qfBase = null, qfSug = null, qfUndoBase = null;   // qfUndoBase: base before the last fix, so Ctrl+Z brings the 💡 back
+const qf = { open: false, acts: [], sel: 0 };
+const qfBulb = $("qfBulb"), qfBox = $("qf"), qfList = $("qfList"), qfPrev = $("qfPrev"), qfHead = $("qfHead");
+const qfFmt = n => String(Number(n.toFixed(6)));
+// display width in the editor: CJK / full-width characters take two columns
+const qfWidth = s => s.length + (s.match(/[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/g) || []).length;
+const qfPad = (s, w) => s + " ".repeat(Math.max(0, w - qfWidth(s)));
+
+function qfRows(text) {
+  const rows = [];
+  text.split("\n").forEach((raw, i) => {
+    const code = stripComment(raw).trim();
+    if (code.includes("|") && !/^(text|caption|brace)\b/.test(code)) rows.push({ i, code });
+  });
+  return rows;
+}
+function qfInfo(code) {
+  const parts = code.split("|").map(s => s.trim()), st = parts[parts.length - 1];
+  const at = st.match(/^@(-?[\d.]+)(?=\s|$)/), num = parts[0].match(/^(\d+)(?=\s|$)/);
+  return { start: at ? Number(at[1]) : 0, hasStages: st.replace(/^@\S*/, "").trim() !== "", num: num ? Number(num[1]) : null };
+}
+function qfCheck() {
+  const rows = qfRows(src.value), codes = rows.map(r => r.code);
+  if (!qfBase) qfBase = codes;
+  const detect = b => {
+    let p = 0, s = 0;
+    while (p < b.length && p < codes.length && b[p] === codes[p]) p++;
+    while (s < b.length - p && s < codes.length - p && b[b.length - 1 - s] === codes[codes.length - 1 - s]) s++;
+    if (s === 0) return null;                                        // nothing below the change: nothing to fix
+    if (codes.length > b.length && p + s === b.length) return { ins: true, p, k: codes.length - b.length, rows, base: b };
+    if (codes.length < b.length && p + s === codes.length) return { ins: false, p, k: b.length - codes.length, rows, base: b };
+    return null;
+  };
+  let found = detect(qfBase);
+  if (!found && qfUndoBase && (found = detect(qfUndoBase))) qfBase = qfUndoBase;
+  const issues = qfLint(src.value, rows);
+  for (const is of issues) errors.textContent += (errors.textContent ? "\n" : "") + is.msg;
+  if (found) {
+    qfSug = found;
+    qfSug.anchor = found.ins ? rows[found.p + found.k - 1].i : rows[found.p].i;
+    qfSug.acts = qfActions(qfSug);
+    if (qfSug.acts.length > 1) return qfPlaceBulb();
+  } else qfBase = codes;
+  // no insertion / deletion to fix, but something looks wrong (duplicated numbers, a misspelled stage)
+  const shown = issues.filter(is => !qfIgnored.has(is.key));
+  if (shown.length) { qfSug = qfLintSug(shown); return qfPlaceBulb(); }
+  qfSug = null;
+  qfHide();
+}
+
+// ---- lint: problems found by looking at the whole input, whatever the edit history
+// each issue: { key, msg (error panel), anchor (line), title, why, fix(lines) }
+let qfIgnored = new Set();   // keys of issues the user chose to ignore (a key changes when the problem changes)
+function qfLint(text, rows) {
+  const out = [], dup = qfDupIssue(text, rows);
+  if (dup) out.push(dup);
+  // the stage name right before the caret is still being typed ("W" before "WB"): checked once the caret leaves it
+  return out.concat(qfStageIssues(text, document.activeElement === src && src.selectionStart === src.selectionEnd ? src.selectionStart : -1));
+}
+function qfLintSug(issues) {
+  const L0 = src.value.split("\n");
+  const apply = list => { const L = L0.slice(); list.forEach(is => is.fix(L)); return L; };
+  const acts = issues.map(is => ({ title: is.title, why: is.why, lines: apply([is]) }));
+  // stage fixes first: renumbering changes the label width, the stage fixes do not depend on it
+  if (issues.length > 1) acts.unshift({ title: `おすすめ：まとめて直す（${issues.length} 件）`, why: issues.map(is => "・" + is.why).join("\n"),
+    lines: apply([...issues.filter(is => is.stage), ...issues.filter(is => !is.stage)]) });
+  acts.push({ title: "この提案を無視", ignore: true });
+  return { lint: true, issues, anchor: issues[0].anchor, acts,
+    head: issues.length === 1 && !issues[0].stage ? "命令番号が重複しています" : "入力に間違いがありそうです" };
+}
+
+// duplicated instruction numbers -> renumber the numbered rows 1, 2, 3 … from the first number
+function qfDupIssue(text, rows) {
+  const numbered = rows.map(r => ({ i: r.i, n: qfInfo(r.code).num })).filter(x => x.n !== null);
+  const seen = new Map(), pairs = [];
+  for (const x of numbered) { if (seen.has(x.n)) pairs.push([seen.get(x.n), x]); else seen.set(x.n, x); }
+  if (!pairs.length) return null;
+  const start = numbered[0].n, nums = new Map();
+  numbered.forEach((x, j) => { if (x.n !== start + j) nums.set(x.i, start + j); });
+  const where = pairs.slice(0, 3).map(([a, b]) => `${a.i + 1} 行目と ${b.i + 1} 行目（${a.n}）`).join("、") + (pairs.length > 3 ? " ほか" : "");
+  const vals = [...nums.values()];
+  return {
+    key: "dup:" + numbered.map(x => x.n).join(","), anchor: pairs[0][1].i,
+    msg: `命令番号が重複しています：${where}（💡 Ctrl+. で振り直せます）`,
+    title: `番号を振り直す（${vals.length > 1 ? `${Math.min(...vals)}〜${Math.max(...vals)}` : vals[0]}）`,
+    why: `命令番号が重複しています：${where}。番号の付いた行を上から ${start}, ${start + 1}, ${start + 2} … と振り直します。`,
+    fix: L => qfRenumber(L, { nums }),
+  };
+}
+
+// ---- stage names: a rare name very close to a common one in the same input is probably a typo
+// ("EXX" / "MEN" / "ｅｘ" next to many "EX" / "MEM"). Usual stage names are never reported, and a name
+// is only compared with names used at least twice as often (so a deliberate custom name used a lot is fine).
+const STAGE_KNOWN = new Set("IF ID EX MEM WB RE RN DS IS SC CM CT RF RR WR DC AG MA ME".split(" "));
+const qfHalf = s => s.replace(/[！-～]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
+// edit distance with swaps of neighbours counted as one ("EIX" / "XE")
+function qfDist(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+// every stage name on instruction rows: [{ line, name, prev, next }] (prev / next: neighbouring stage names
+// in the row, for context). The token that ends exactly at `caret` is still being typed and is left out.
+function qfStageNames(text, caret = -1) {
+  const out = [];
+  let pos = 0;
+  text.split("\n").forEach((raw, i) => {
+    const lineStart = pos;
+    pos += raw.length + 1;
+    const code = stripComment(raw), t = code.trim();
+    if (!t.includes("|") || /^(text|caption|brace)\b/.test(t)) return;
+    const bar = code.lastIndexOf("|"), row = [];
+    [...code.slice(bar + 1).matchAll(/\S+/g)].forEach((m, tok) => {   // tok: index of the token in the stage list
+      const n = m[0].match(/^([^{}*@\s]+)/);
+      if (!n || /^(-|_|\.+|…|・+)$/.test(n[1])) return;
+      if (lineStart + bar + 1 + m.index + m[0].length === caret) { row.push(null); return; }
+      row.push({ name: n[1], tok });
+    });
+    row.forEach((o, j) => { if (o) out.push({ line: i, name: o.name, tok: o.tok, prev: row[j - 1]?.name || null, next: row[j + 1]?.name || null }); });
+  });
+  return out;
+}
+function qfStageIssues(text, caret = -1) {
+  const names = qfStageNames(text, caret), freq = new Map(), pair = new Map();
+  for (const { name, next } of names) {
+    freq.set(name, (freq.get(name) || 0) + 1);
+    if (next) pair.set(name + " " + next, (pair.get(name + " " + next) || 0) + 1);
+  }
+  const issues = [];
+  for (const [n, f] of freq) {
+    if (STAGE_KNOWN.has(n)) continue;
+    const occ = names.filter(x => x.name === n);
+    const common = [...freq].filter(([c, fc]) => c !== n && fc >= 2 && fc >= 2 * f);
+    const N = qfHalf(n).toUpperCase(), limit = N.length <= 3 ? 1 : 2;
+    const cands = [];
+    for (const [c, fc] of common) {
+      const C = qfHalf(c).toUpperCase();
+      let d, how;
+      if (C === N) { d = 0; how = "（全角・小文字の違い）"; }
+      else if (N.length <= 2 && C.startsWith(N)) { d = 1; how = "（途中までしか入力されていない？）"; }   // "W" -> "WB", "M" -> "MEM"
+      else { d = qfDist(N, C); how = ""; if (d > limit || d >= N.length) continue; }
+      cands.push({ c, fc, d, how, first: C[0] === N[0] ? 0 : 1 });
+    }
+    if (!cands.length) continue;
+    // each place may mean a different name ("IF I EX" -> ID, "I ID EX" -> IF): decide per occurrence by
+    // how often the candidate sits between the same neighbours in other rows
+    const groups = new Map();
+    for (const o of occ) {
+      let best = null;
+      for (const cd of cands) {
+        const ctx = (o.prev ? pair.get(o.prev + " " + cd.c) || 0 : 0) + (o.next ? pair.get(cd.c + " " + o.next) || 0 : 0);
+        // closest first, then the one that fits the neighbours, then the same first letter, then the most used
+        const score = [cd.d, -ctx, cd.first, -cd.fc];
+        const i = best ? score.findIndex((v, j) => v !== best.score[j]) : -1;
+        if (!best || (i >= 0 && score[i] < best.score[i])) best = { ...cd, score };
+      }
+      if (!groups.has(best.c)) groups.set(best.c, { best, occ: [] });
+      groups.get(best.c).occ.push(o);
+    }
+    for (const { best, occ: os } of groups.values()) {
+      const lines = [...new Set(os.map(x => x.line))];
+      const at = lines.slice(0, 5).map(l => l + 1).join(", ") + (lines.length > 5 ? " ほか" : "");
+      const kind = best.how, ctxNote = groups.size > 1 ? `前後のステージから見て` : "";
+      issues.push({
+        stage: true, key: `stage:${n}:${best.c}:${os.length}`, anchor: lines[0],
+        msg: `${at} 行目: ステージ "${n}" は "${best.c}" の間違いかもしれません${kind}（💡 Ctrl+. で直せます）`,
+        title: `ステージ名 "${n}" → "${best.c}"（${at} 行目）`,
+        why: `"${n}" はこの入力で ${f} 回だけですが、よく似た "${best.c}" が ${best.fc} 回使われています${kind}。${ctxNote}${at} 行目の "${n}" を "${best.c}" にします。`,
+        fix: L => {
+          for (const o of os) {
+            const raw = L[o.line], code = stripComment(raw), bar = code.lastIndexOf("|");
+            let k = -1;
+            const seg = code.slice(bar + 1).replace(/\S+/g, tok => {
+              if (++k !== o.tok) return tok;
+              const m = tok.match(/^([^{}*@\s]+)(.*)$/);
+              return m && m[1] === n ? best.c + m[2] : tok;
+            });
+            L[o.line] = code.slice(0, bar + 1) + seg + raw.slice(code.length);
+          }
+        },
+      });
+    }
+  }
+  return issues.sort((a, b) => a.anchor - b.anchor);
+}
+
+// ---- what should change (worked out once per edit; the edits below only apply it)
+function qfPlan(sug) {
+  const { ins, p, k, rows, base } = sug, B = base.map(qfInfo);
+  const follow = ins ? rows.slice(p + k) : rows.slice(p);            // rows below the change (current text)
+  const oldFirst = ins ? p : p + k;                                  // old row index of follow[0]
+  const plan = { follow, oldFirst, nextStart: B[oldFirst].start };
+  // right end of the rows before the edit (to tell whether the legend sat to the right of them)
+  const D0 = parse(src.value);
+  plan.oldEnd = Math.max(0, ...base.map(c => { try { return parseRow(c, D0).end; } catch (e) { return 0; } }));
+
+  // timing, case 1: the rows were issued in a regular pattern, w instructions per cycle
+  // (@0 @0 @1 @1 @2 @2 …): re-pack everything from the change on so the pattern continues
+  const pat = qfPattern(B.map(b => b.start));
+  if (pat && pat.w >= 2 && (!ins || rows.slice(p, p + k).every(r => qfInfo(r.code).hasStages))) {
+    const starts = new Map(), dxRow = new Map();
+    rows.forEach((r, j) => {
+      if (j < p) return;
+      const want = Math.floor(j / pat.w) + pat.c, cur = qfInfo(r.code).start;
+      if (Math.abs(want - cur) > 1e-9) starts.set(r.i, want);
+    });
+    // dxRow stays empty: rows move by different amounts (0, 1, 0, 1 …), so annotations keep their x
+    // (moving them per row would bend arrows that span several rows)
+    if (starts.size) plan.timing = { starts, dxRow, pack: true, short: "開始",
+      title: `${p + 1} 行目以降の開始を ${pat.w} 命令ずつに詰め直す`,
+      why: `命令が ${pat.w} 個ずつ 1 サイクルごとに発行されている（@${qfFmt(pat.c)} が ${pat.w} 行、@${qfFmt(pat.c + 1)} が ${pat.w} 行 …）ので、${ins ? "追加" : "削除"}後もその並びになるように ${p + 1} 行目以降の開始を詰め直します` };
+    return qfPlanRest(plan, sug, B);
+  }
+
+  // timing, case 2: keep the spacing between the next row and the row in front of it
+  const next = B[oldFirst];
+  let ref = null, gap = null, why = "";
+  if (ins) {
+    const last = qfInfo(rows[p + k - 1].code);
+    if (last.hasStages) {
+      gap = p > 0 ? next.start - B[p - 1].start : 1;
+      ref = last.start;
+      why = p > 0 ? `元の ${p} 行目と ${p + 1} 行目は ${gap} サイクル差。追加した行は @${qfFmt(last.start)} 開始なので、同じ差を保つと次の行は @${qfFmt(last.start + gap)}`
+        : `追加した行は @${qfFmt(last.start)} 開始なので、次の行はその 1 サイクル後 @${qfFmt(last.start + 1)}`;
+    }
+  } else {
+    gap = next.start - B[p + k - 1].start;
+    ref = p > 0 ? B[p - 1].start : B[p].start - gap;
+    why = p > 0 ? `削除した行と次の行は ${gap} サイクル差。前の行（@${qfFmt(B[p - 1].start)}）から同じ差を保つと次の行は @${qfFmt(ref + gap)}`
+      : `先頭の行を削除したので、次の行を削除した行の開始 @${qfFmt(B[p].start)} に合わせる`;
+  }
+  if (ref !== null && gap >= 0) {
+    let shift = ref + gap - next.start;
+    const minStart = Math.min(...follow.map(r => qfInfo(r.code).start));
+    if (minStart + shift < 0) shift = -minStart;
+    if (Math.abs(shift) > 1e-9) {
+      const s = (shift > 0 ? "+" : "") + qfFmt(shift), starts = new Map(), dxRow = new Map();
+      follow.forEach((r, j) => { starts.set(r.i, qfInfo(r.code).start + shift); dxRow.set(oldFirst + j, shift); });
+      plan.timing = { starts, dxRow, by: shift, why, short: `開始 ${s}`,
+        title: `後ろの ${follow.length} 命令の開始を ${s} サイクル${shift > 0 ? "遅らせる" : "早める"}` };
+    }
+  }
+  return qfPlanRest(plan, sug, B);
+}
+// a regular issue pattern: start of row j = floor(j / w) + c (w instructions issued per cycle)
+function qfPattern(starts) {
+  for (let w = 1; w <= 4 && starts.length >= w + 1; w++)
+    if (starts.every((s, j) => Math.abs(s - (Math.floor(j / w) + starts[0])) < 1e-9)) return { w, c: starts[0] };
+  return null;
+}
+function qfPlanRest(plan, sug, B) {
+  const { ins, p, k, rows } = sug, follow = plan.follow;
+  // numbering: a full 1, 2, 3 … sequence is renumbered as a whole; otherwise the rows below move by k
+  const nb = B.map(b => b.num);
+  const seq = nb.length >= 2 && nb.every((n, i) => n !== null && (i === 0 || n === nb[i - 1] + 1));
+  plan.nums = new Map();                                             // line index -> new number
+  if (seq) rows.forEach((r, i) => { if (qfInfo(r.code).num !== nb[0] + i) plan.nums.set(r.i, nb[0] + i); });
+  else for (const r of follow) { const n = qfInfo(r.code).num; if (n !== null) plan.nums.set(r.i, n + (ins ? k : -k)); }
+  plan.seq = seq;
+
+  // were the "|" columns of the untouched rows aligned? Rows with Japanese text are skipped here: their
+  // glyphs are not exactly two columns wide, so people align them by eye
+  const L = src.value.split("\n"), untouched = rows.filter((r, i) => !(ins && i >= p && i < p + k));
+  const bars = untouched.map(r => stripComment(L[r.i]))
+    .filter(c => qfWidth(c) === c.length)
+    .map(c => [...c].flatMap((ch, j) => ch === "|" ? [j] : []));
+  // the column layout most rows use (a few rows such as "13 output1 |" may already stick out)
+  const count = new Map();
+  for (const b of bars) count.set(b.join(","), (count.get(b.join(",")) || 0) + 1);
+  const [modeKey, modeN] = [...count].sort((a, b) => b[1] - a[1])[0] || ["", 0];
+  if (modeN >= 2 && modeN * 3 >= bars.length * 2 && modeKey)
+    plan.align = { cols: modeKey.split(",").map(Number), rows: new Set([...(ins ? rows.slice(p, p + k).map(r => r.i) : []),
+      ...[...plan.nums.keys()].filter(i => qfWidth(L[i]) === L[i].length)]) };   // renumbering keeps the spacing of Japanese rows
+  return plan;
+}
+// old row y -> how it maps: { dy, moved } or null when the row was deleted
+function qfMapRow(sug, r) {
+  const { ins, p, k } = sug;
+  if (ins) return r >= p ? { dy: k, moved: true } : { dy: 0, moved: false };
+  if (r >= p + k) return { dy: -k, moved: true };
+  if (r >= p) return null;
+  return { dy: 0, moved: false };
+}
+
+// ---- edits on the array of lines (the line count never changes)
+function qfRenumber(lines, plan) {
+  for (const [i, n] of plan.nums) {
+    const raw = lines[i], bar = raw.indexOf("|"), lab = raw.slice(0, bar);
+    const mm = lab.match(/^(\s*)(\d+)(?=\s|$)(.*?)(\s*)$/);
+    if (!mm) { lines[i] = lab.replace(/^(\s*)/, `$1${n} `).replace(/\s+$/, " ") + raw.slice(bar); continue; }   // inserted row without a number
+    const nn = String(n), d = nn.length - mm[2].length;
+    let sp = mm[4];
+    if (d > 0 && sp.length > d) sp = sp.slice(d); else if (d < 0) sp += " ".repeat(-d);
+    lines[i] = mm[1] + nn + mm[3] + sp + raw.slice(bar);
+  }
+}
+function qfShift(lines, plan) {
+  for (const [i, n] of plan.timing.starts) {
+    const raw = lines[i], code = stripComment(raw), bar = code.lastIndexOf("|"), seg = code.slice(bar + 1);
+    if (!seg.trim()) continue;
+    const mm = seg.match(/^(\s*)@(-?[\d.]+)(?=\s|$)\s*/), lead = seg.match(/^\s*/)[0];
+    const body = mm ? seg.slice(mm[0].length) : seg.trimStart();
+    lines[i] = code.slice(0, bar + 1) + lead + (Math.abs(n) > 1e-9 ? `@${qfFmt(n)} ` : "") + body + raw.slice(code.length);
+  }
+}
+// annotations follow their row: y with the row (opt.y), x with the row's timing change (opt.x)
+// returns the line indices of annotations that sat on deleted rows (left unchanged here)
+function qfNotes(lines, sug, plan, opt) {
+  const orphans = [];
+  const pt = (x, y) => {
+    const r = Math.floor(Number(y)), m = qfMapRow(sug, r);
+    if (!m) return null;
+    const dx = opt.x && plan.timing ? plan.timing.dxRow.get(r) || 0 : 0;   // the timing change of the row it sits on
+    return [dx ? qfFmt(Number(x) + dx) : x, opt.y && m.dy ? qfFmt(Number(y) + m.dy) : y];
+  };
+  const edge = (e, top) => {                                         // brace edges sit between rows
+    e = Number(e);
+    const { ins, p, k } = sug;
+    if (ins) return (top ? e >= p : e > p) ? e + k : e;
+    if (top ? e >= p + k : e > p + k) return e - k;
+    if (top ? e >= p : e > p) return p;
+    return e;
+  };
+  lines.forEach((raw, i) => {
+    const code = stripComment(raw);
+    let nc = code, orphan = false;
+    if (/^\s*text\s/.test(code)) {
+      nc = code.replace(/^(\s*text\s+)(-?[\d.]+)(\s+)(-?[\d.]+)/, (all, a, x, s, y) => {
+        const q = pt(x, y); if (!q) { orphan = true; return all; } return a + q[0] + s + q[1];
+      });
+    } else if (/^\s*arrow\s/.test(code)) {
+      const re = /(^|\s)(-?[\d.]+),(-?[\d.]+)(?=\s|$)/g;
+      if ([...code.matchAll(re)].some(m => !pt(m[2], m[3]))) orphan = true;
+      else nc = code.replace(re, (all, a, x, y) => { const q = pt(x, y); return a + q[0] + "," + q[1]; });
+    } else if (/^\s*brace\s/.test(code)) {
+      const m = code.match(/^(\s*brace\s+)(-?[\d.]+)(\s+)(-?[\d.]+)/);
+      if (m) {
+        const y1 = edge(m[2], true), y2 = edge(m[4], false);
+        if (y1 >= y2) orphan = true;
+        else if (opt.y) nc = m[1] + qfFmt(y1) + m[3] + qfFmt(y2) + code.slice(m[0].length);
+      }
+    }
+    if (orphan) orphans.push(i);
+    else if (nc !== code) lines[i] = nc + raw.slice(code.length);
+  });
+  return orphans;
+}
+// put the "|" of the touched rows (inserted / renumbered) at the columns the other rows use;
+// when a touched row is too long for that, realign every row instead
+function qfAlign(lines, plan) {
+  const { cols } = plan.align;
+  const fitted = [];
+  for (const i of plan.align.rows) {
+    const raw = lines[i], code = stripComment(raw), parts = code.trim().split("|").map(s => s.trim());
+    if (parts.length !== cols.length + 1) continue;
+    let s = code.match(/^\s*/)[0];
+    for (let j = 0; j < cols.length; j++) {
+      if (qfWidth(s + parts[j]) + 1 > cols[j]) return qfAlignAll(lines);
+      s = qfPad(s + parts[j], cols[j]) + "| ";
+    }
+    fitted.push([i, (s + parts[cols.length]).replace(/\s+$/, "") + raw.slice(code.length)]);
+  }
+  for (const [i, l] of fitted) lines[i] = l;
+}
+function qfAlignAll(lines) {
+  const rows = qfRows(lines.join("\n")).map(r => {
+    const raw = lines[r.i], code = stripComment(raw);
+    return { i: r.i, lead: code.match(/^\s*/)[0], parts: code.trim().split("|").map(s => s.trim()), rest: raw.slice(code.length) };
+  }).filter(r => r.parts.length === 2 || r.parts.length === 3);
+  const W = Math.max(...rows.map(r => qfWidth(r.parts[0])));
+  const T = Math.max(0, ...rows.filter(r => r.parts.length === 3).map(r => qfWidth(r.parts[1])));
+  for (const r of rows) {
+    const [lab, ...more] = r.parts, st = more.pop();
+    const line = r.lead + qfPad(lab, W) + " | " + (more.length ? qfPad(more[0], T) + " | " : "") + st;
+    lines[r.i] = line.replace(/\s+$/, "") + r.rest;
+  }
+}
+// vlines at or after the moved rows' old start move with them ("vline 4" marking the branch's EX -> "vline 5")
+function qfVline(lines, plan) {
+  if (!plan.timing || plan.timing.by === undefined) return 0;   // only for a uniform shift
+  const by = plan.timing.by, from = plan.nextStart;
+  let n = 0;
+  lines.forEach((raw, i) => {
+    const code = stripComment(raw), m = code.match(/^(\s*vline)((?:\s+-?[\d.]+)+)/);
+    if (!m) return;
+    const xs = m[2].replace(/-?[\d.]+/g, x => Number(x) >= from ? (n++, qfFmt(Number(x) + by)) : x);
+    if (xs !== m[2]) lines[i] = m[1] + xs + code.slice(m[0].length) + raw.slice(code.length);
+  });
+  return n;
+}
+// a legend placed to the right of the rows stays to the right when the rows get longer / shorter
+function qfLegend(lines, plan) {
+  const D = parse(lines.join("\n")), end = Math.max(0, ...D.rows.map(r => r.end)), d = end - plan.oldEnd;
+  if (Math.abs(d) < 1e-9) return false;
+  let hit = false;
+  lines.forEach((raw, i) => {
+    const code = stripComment(raw), m = code.match(/^(\s*legend\s+)(-?[\d.]+)(?=\s)/);
+    if (m && Number(m[2]) >= plan.oldEnd - 1e-9) { lines[i] = m[1] + qfFmt(Number(m[2]) + d) + code.slice(m[0].length) + raw.slice(code.length); hit = true; }
+  });
+  return hit;
+}
+const qfComment = (lines, idx) => idx.forEach(i => { lines[i] = "// " + lines[i]; });
+
+function qfActions(sug) {
+  const plan = qfPlan(sug), L0 = src.value.split("\n"), { ins, k } = sug, n = plan.follow.length;
+  const make = (title, why, fns) => { const L = L0.slice(); fns.forEach(f => f(L)); return { title, why, lines: L }; };
+  const changed = a => a.lines.some((l, i) => l !== L0[i]);
+  const acts = [];
+
+  if (plan.nums.size) {
+    const vals = [...plan.nums.values()], range = vals.length > 1 ? `${Math.min(...vals)}〜${Math.max(...vals)}` : `${vals[0]}`;
+    acts.push(make(`番号を振り直す（${range}）`,
+      plan.seq ? `番号が ${sug.base.length} 行の連番なので、${ins ? "追加した行も含めて" : "削除後の行を"}上から振り直します。`
+        : `後ろの ${n} 命令の番号を ${ins ? "+" : "−"}${k} します。`,
+      [L => qfRenumber(L, plan)]));
+  }
+  // moving the rows sideways takes along what belongs to them: their annotations, later vlines, a legend on the right
+  const shiftFns = plan.timing ? [L => qfShift(L, plan), L => qfNotes(L, sug, plan, { x: true }), L => qfVline(L, plan)] : [];
+  if (plan.timing) {
+    const L1 = L0.slice(); shiftFns.forEach(f => f(L1));
+    const along = [qfVline(L0.slice(), plan) && "その後ろの縦線（vline）", qfLegend(L1, plan) && "右側の凡例"].filter(Boolean);
+    acts.push(make(plan.timing.title,
+      plan.timing.why + (plan.timing.pack ? "。行ごとにずれ方が違うので、注釈の横位置は変えません。"
+        : `。その行に付いている注釈${along.length ? "、" + along.join("、") : ""}も横に動かします。`),
+      [...shiftFns, L => qfLegend(L, plan)]));
+  } else {
+    const lg = make("凡例を図の右側に保つ", "凡例は命令の右側に置かれていましたが、命令の右端が変わるので、同じだけずらして重ならないようにします。",
+      [L => qfLegend(L, plan)]);
+    if (changed(lg)) acts.push(lg);
+  }
+  const yOnly = make(`注釈を行に合わせて${ins ? "下げる" : "上げる"}（${k} 行）`,
+    `後ろの命令の行にある text / arrow / brace を、その行と一緒に${ins ? "下" : "上"}へ動かします。`, [L => qfNotes(L, sug, plan, { y: true })]);
+  if (changed(yOnly)) acts.push(yOnly);
+  const orphans = qfNotes(L0.slice(), sug, plan, { y: true });
+  if (orphans.length) acts.push(make(`削除した行にあった注釈 ${orphans.length} 個をコメントアウト`,
+    `削除した命令の行に置かれていた注釈です（${orphans.map(i => i + 1).join(", ")} 行目）。消さずに // を付けます。`,
+    [L => qfComment(L, orphans)]));
+  // everything together, in an order where each step still sees the positions it expects.
+  // Column alignment is left out on purpose: a short new label ("2 nop") would be padded out to the longest
+  // label's column, and rows with Japanese text cannot be lined up exactly with spaces anyway.
+  const allFns = [L => qfRenumber(L, plan)];
+  if (plan.timing) allFns.push(L => qfShift(L, plan), L => qfVline(L, plan));
+  allFns.push(L => qfNotes(L, sug, plan, { x: true, y: true }));
+  if (orphans.length) allFns.push(L => qfComment(L, orphans));
+  allFns.push(L => qfLegend(L, plan));
+  const all = make("", acts.map(a => "・" + a.why).join("\n"), allFns);
+  const moved = re => all.lines.some((l, i) => l !== L0[i] && !l.startsWith("// ") && re.test(L0[i]));
+  const parts = [plan.nums.size && "番号", plan.timing && plan.timing.short,
+    moved(/^\s*(text|arrow|brace)\b/) && "注釈", moved(/^\s*vline\b/) && "縦線", moved(/^\s*legend\b/) && "凡例",
+    orphans.length && "コメントアウト"].filter(Boolean);
+  all.title = `おすすめ：まとめて直す（${parts.join("・")}）`;
+  // alignment only on request, listed last before "ignore"
+  if (plan.align) {
+    const al = make("「|」の位置をほかの行にそろえる（短い名前は空白が多くなります）",
+      "ほかの命令行は「|」の位置がそろっているので、追加・番号変更した行も同じ位置にそろえます。名前が短いと「|」の前に空白が多く入ります。", [L => qfAlign(L, plan)]);
+    if (changed(al)) acts.push(al);
+  }
+  const real = acts.filter(changed);
+  const key = a => a.lines.join("\n");
+  const out = real.length > 1 && changed(all) && !real.some(a => key(a) === key(all)) ? [all, ...real] : real;
+  return [...out, { title: "この提案を無視", ignore: true }];
+}
+
+// ---- 💡 and the menu
+function qfLineEnd(i) { const L = src.value.split("\n"); let p = 0; for (let j = 0; j < i; j++) p += L[j].length + 1; return p + L[i].length; }
+function qfPlaceBulb() {
+  const pt = caretXY(qfLineEnd(qfSug.anchor)), r = src.getBoundingClientRect();
+  if (pt.y < r.top || pt.y + pt.h > r.bottom) { qfBulb.hidden = true; return; }   // scrolled out of view
+  qfBulb.hidden = false;
+  qfBulb.style.top = pt.y + (pt.h - qfBulb.offsetHeight) / 2 + "px";
+  qfBulb.style.left = Math.min(pt.x + 10, r.right - qfBulb.offsetWidth - 6) + "px";
+  if (qf.open) qfPlaceBox();
+}
+function qfHide() { qfBulb.hidden = true; qfClose(); }
+function qfClose() { qf.open = false; qfBox.hidden = true; }
+function qfOpen() {
+  if (!qfSug) return;
+  acClose();
+  Object.assign(qf, { open: true, acts: qfSug.acts, sel: 0 });
+  qfHead.textContent = `クイックフィックス：${qfSug.lint ? qfSug.head : `命令行を途中に${qfSug.ins ? "追加" : "削除"}しました`}（↑↓ 選択・Enter 適用・Esc 閉じる）`;
+  qfList.replaceChildren(...qf.acts.map((a, i) => {
+    const row = document.createElement("div");
+    row.className = "ac-item" + (a.ignore ? " qf-ignore" : "");
+    row.dataset.i = i;
+    row.textContent = a.title;
+    return row;
+  }));
+  qfBox.hidden = false;
+  qfSelect(0);
+  qfPlaceBox();
+}
+function qfPlaceBox() {
+  const b = qfBulb.getBoundingClientRect(), w = qfBox.offsetWidth, h = qfBox.offsetHeight;
+  let top = b.bottom + 4;
+  if (top + h > innerHeight - 4 && b.top - h - 4 > 4) top = b.top - h - 4;
+  qfBox.style.top = Math.max(4, top) + "px";
+  qfBox.style.left = Math.max(4, Math.min(b.left, innerWidth - w - 4)) + "px";
+}
+// preview: the lines the selected fix changes, as - old / + new
+function qfSelect(i) {
+  qf.sel = (i + qf.acts.length) % qf.acts.length;
+  [...qfList.children].forEach((el, j) => el.classList.toggle("sel", j === qf.sel));
+  const a = qf.acts[qf.sel], L0 = src.value.split("\n");
+  qfPrev.replaceChildren();
+  if (a.ignore) { qfPrev.textContent = "入力はそのままにして 💡 を消します。"; return; }
+  const why = document.createElement("div");
+  why.className = "why"; why.textContent = a.why;
+  qfPrev.append(why);
+  const diff = a.lines.map((l, j) => [j, L0[j], l]).filter(([, o, nw]) => o !== nw);
+  for (const [j, o, nw] of diff.slice(0, 12)) {
+    for (const [cls, sign, t] of [["del", "−", o], ["add", "+", nw]]) {
+      const d = document.createElement("div");
+      d.className = cls;
+      d.textContent = `${String(j + 1).padStart(3)} ${sign} ${t}`;
+      qfPrev.append(d);
+    }
+  }
+  if (diff.length > 12) qfPrev.append(`…ほか ${diff.length - 12} 行`);
+}
+function qfApply(i) {
+  const a = qf.acts[i], base = qfBase;
+  qfClose();
+  if (!a.ignore) {
+    const pos = src.selectionStart, head = src.value.slice(0, pos).split("\n"), li = head.length - 1;
+    const st = src.scrollTop, text = a.lines.join("\n");
+    snip = null;
+    acReplace(0, src.value.length, text);
+    let p = 0;
+    for (let j = 0; j < li; j++) p += a.lines[j].length + 1;
+    p += Math.min(head[li].length, a.lines[li].length);
+    src.setSelectionRange(p, p);
+    src.scrollTop = st;
+    render();
+    flash("修正を適用しました（Ctrl+Z で元に戻せます）");
+  }
+  if (a.ignore && qfSug && qfSug.lint) qfSug.issues.forEach(is => qfIgnored.add(is.key));   // hidden until the problem changes
+  qfUndoBase = a.ignore ? null : base;
+  qfBase = qfRows(src.value).map(r => r.code);
+  qfSug = null;
+  qfHide();
+}
+
+// keys while the menu is open are handled here first (capture), so the completion / Tab handlers do not see them
+src.addEventListener("keydown", e => {
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === "." && e.ctrlKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); qf.open ? qfClose() : qfOpen(); return; }
+  if (!qf.open || ["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
+  const stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+  if (e.key === "ArrowDown") { stop(); qfSelect(qf.sel + 1); }
+  else if (e.key === "ArrowUp") { stop(); qfSelect(qf.sel - 1); }
+  else if (e.key === "Enter" || e.key === "Tab") { stop(); qfApply(qf.sel); }
+  else if (e.key === "Escape") { stop(); qfClose(); }
+  else qfClose();
+}, true);
+src.addEventListener("blur", qfClose);
+{
+  let lastLine = -1;
+  const caretLine = () => src.value.slice(0, src.selectionStart).split("\n").length;
+  document.addEventListener("selectionchange", () => {
+    if (document.activeElement !== src) return;
+    const l = caretLine();
+    if (l !== lastLine) { const moved = lastLine !== -1; lastLine = l; if (moved) render(); }
+  });
+  src.addEventListener("blur", () => { lastLine = -1; render(); });
+}
+src.addEventListener("mousedown", qfClose);
+src.addEventListener("scroll", () => { if (qfSug) qfPlaceBulb(); });
+window.addEventListener("resize", () => { if (qfSug) qfPlaceBulb(); });
+qfBulb.addEventListener("mousedown", e => e.preventDefault());
+qfBulb.addEventListener("click", () => { src.focus(); qf.open ? qfClose() : qfOpen(); });
+qfBox.addEventListener("mousedown", e => e.preventDefault());
+qfList.addEventListener("click", e => { const row = e.target.closest(".ac-item"); if (row) qfApply(Number(row.dataset.i)); });
+qfList.addEventListener("mousemove", e => { const row = e.target.closest(".ac-item"); if (row && Number(row.dataset.i) !== qf.sel) qfSelect(Number(row.dataset.i)); });
 $("zoom").addEventListener("change", render);
 window.addEventListener("resize", () => { if ($("zoom").value === "fit") render(); });
 // ---- templates: built-in PRESETS (read-only) + user templates kept in this browser's localStorage
@@ -873,7 +1859,7 @@ const TOUR = [
     <li><b>PNG で保存</b> / <b>SVG で保存</b>：画像として保存</li>
     <li><b>PNG をクリップボードにコピー</b>：そのまま貼り付けられます</li></ul>
     保存の3つは、Chrome / Edge では保存場所とファイル名を選べます（前回の書き出し先が最初に開きます。入力テキストの保存先とは別に覚えます）。` },
-  { sel: "#src", title: "入力欄", text: "ここに命令列や注釈をテキストで書きます。書き換えると右の図がすぐ描き直されます。<br>内容はブラウザに自動保存され、開き直すと戻ります。書き方は下の「記法リファレンス」を見てください。" },
+  { sel: "#src", title: "入力欄", text: "ここに命令列や注釈をテキストで書きます。書き換えると右の図がすぐ描き直されます。<br>内容はブラウザに自動保存され、開き直すと戻ります。書き方は下の「記法リファレンス」を見てください。<br>入力中は候補（コマンド名・種類・スタイル・ステージ名・色など）が出ます。<b>Tab / Enter</b> で決定、<b>Ctrl+Space</b> でいつでも表示できます。" },
   { sel: "#errors", fallback: "#src", title: "エラー表示", text: "書き方に間違いがあると、入力欄の下に赤い欄が出て、何行目の何が問題かを表示します。間違えた部分は既定の見た目で描かれ、ほかの部分はそのまま表示されます。" },
   { sel: "details > summary", title: "記法リファレンス", text: "クリックすると、命令行・色・注釈・<code>set</code> のキーなど、入力欄の書き方の一覧が開きます。" },
   { sel: "#stage", title: "プレビュー", text: "入力欄の内容から描いた図です。書き出すとこの見た目のままファイルになります。" },
